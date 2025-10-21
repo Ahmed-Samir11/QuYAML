@@ -1,5 +1,8 @@
 pyyaml
 qiskit
+qiskit-machine-learning
+qiskit-optimization
+qiskit-aer
 numpy
 pytest
 hypothesis
