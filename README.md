@@ -10,7 +10,10 @@ QuYAML provides a simple, human-readable YAML-based syntax for defining quantum 
 
 - 🔄 **Clean YAML Syntax**: Define quantum circuits using intuitive YAML structure
 - 🎯 **Qiskit Integration**: Seamless conversion to Qiskit QuantumCircuit objects
-- 🧪 **Comprehensive Testing**: Unit tests, failure case tests, and property-based tests using Hypothesis
+- 🔢 **Parameterized Gates**: Support for gates with arithmetic expressions and variable substitution
+- � **QML Ready**: Build quantum machine learning feature maps with parameterized rotations
+- 🎲 **Optimization Support**: Create QAOA and other variational quantum algorithm circuits
+- �🧪 **Comprehensive Testing**: Unit tests, metamorphic tests, and property-based tests using Hypothesis
 - 🚀 **CI/CD Ready**: GitHub Actions workflow for automated testing
 - ⚡ **Error Handling**: Custom `QuYamlError` exceptions with clear error messages
 
@@ -42,10 +45,16 @@ pip install -r requirements.txt
 
 ```yaml
 circuit: CircuitName
+metadata:  # Optional
+  type: Circuit Type
+  description: Circuit description
 qreg: q[num_qubits]
 creg: c[num_classical_bits]  # Optional
+parameters:  # Optional - for parameterized circuits
+  param_name: value
 instructions:
   - gate_name qubit_targets
+  - gate_name(expression) qubit_targets  # Parameterized gates
 ```
 
 ### Example: Bell State
@@ -70,12 +79,74 @@ instructions:
   - cx q[0], q[2]
 ```
 
+### Example: Parameterized QML Feature Map
+
+```yaml
+circuit: SimpleFeatureMap
+metadata:
+  type: QML Feature Map
+  description: A 2-qubit feature map with parameterized rotations
+qreg: q[2]
+parameters:
+  x0: 0.5
+  x1: 1.2
+instructions:
+  - h q[0]
+  - h q[1]
+  - barrier
+  - rx(2 * $x0) q[0]
+  - rx(2 * $x1) q[1]
+  - barrier
+  - cx q[0], q[1]
+  - ry(2 * $x0 * $x1) q[1]
+  - cx q[0], q[1]
+```
+
+### Example: QAOA Optimization Ansatz
+
+```yaml
+circuit: QAOA_Ansatz_p1
+metadata:
+  type: QAOA Ansatz
+  description: A simple 2-qubit QAOA ansatz with p=1
+qreg: q[2]
+parameters:
+  gamma: 0.5
+  beta: 1.2
+instructions:
+  # Initial state preparation
+  - h q[0]
+  - h q[1]
+  - barrier
+  # Cost Hamiltonian Layer
+  - cx q[0], q[1]
+  - ry(2 * $gamma) q[1]
+  - cx q[0], q[1]
+  - barrier
+  # Mixer Hamiltonian Layer
+  - rx(2 * $beta) q[0]
+  - rx(2 * $beta) q[1]
+```
+
 ## Supported Gates
 
 - **Single-qubit gates**: `h` (Hadamard), `x` (Pauli-X)
 - **Two-qubit gates**: `cx` (CNOT), `swap`
-- **Parametric gates**: `cphase(angle)` - Controlled phase gate
-- **Measurement**: `measure` (measures all qubits)
+- **Parameterized single-qubit gates**: `rx(angle)`, `ry(angle)` - Rotation gates
+- **Parameterized two-qubit gates**: `cphase(angle)` - Controlled phase gate
+- **Utility**: `barrier` (visual separator), `measure` (measures all qubits)
+
+### Parameter Expressions
+
+Parameters can use arithmetic expressions with:
+- **Variables**: Use `$variable_name` to reference parameters
+- **Constants**: `pi`, `np.pi`
+- **Operators**: `+`, `-`, `*`, `/`, `**` (power)
+- **Functions**: Any NumPy functions available via `np.*`
+- **Examples**: 
+  - `rx($theta) q[0]` - Simple parameter
+  - `ry(2 * $gamma) q[1]` - Arithmetic expression
+  - `cphase(2 * (pi - $x0) * (pi - $x1)) q[0], q[1]` - Complex expression
 
 ## Usage
 
@@ -100,11 +171,12 @@ qc.draw('mpl')
 
 ## Testing
 
-The project includes three types of tests:
+The project includes comprehensive test coverage:
 
-1. **Unit Tests** (`tests/test_valid_circuits.py`): Tests for valid circuit parsing
-2. **Failure Tests** (`tests/test_invalid_syntax.py`): Tests for error handling
-3. **Property-Based Tests** (`tests/test_property_based.py`): Advanced tests using Hypothesis
+1. **Unit Tests** (`tests/test_valid_circuits.py`): Tests for valid circuit parsing with metamorphic testing
+2. **Advanced Circuit Tests** (`tests/test_advanced_circuits.py`): QML feature maps and QAOA ansatz circuits
+3. **Failure Tests** (`tests/test_invalid_syntax.py`): Error handling and edge cases
+4. **Property-Based Tests** (`tests/test_property_based.py`): Hypothesis-based generative testing
 
 Run all tests:
 ```bash
@@ -129,6 +201,8 @@ The parser raises `QuYamlError` exceptions for:
 - Unknown gate names
 - Incorrect gate arguments
 - Out-of-bounds qubit indices
+- Undefined parameters in expressions
+- Invalid parameter expressions
 
 ## CI/CD
 
@@ -143,22 +217,27 @@ The repository includes a GitHub Actions workflow that:
 QuYAML/
 ├── .github/
 │   └── workflows/
-│       └── ci.yml              # GitHub Actions CI/CD
+│       └── ci.yml                 # GitHub Actions CI/CD
 ├── tests/
-│   ├── test_valid_circuits.py  # Unit tests
-│   ├── test_invalid_syntax.py  # Failure case tests
-│   └── test_property_based.py  # Hypothesis property tests
-├── quyaml_parser.py            # Main parser implementation
-├── requirements.txt            # Python dependencies
-├── .gitignore                  # Git ignore rules
-└── README.md                   # This file
+│   ├── test_valid_circuits.py     # Basic circuit unit tests
+│   ├── test_advanced_circuits.py  # QML & optimization tests
+│   ├── test_invalid_syntax.py     # Error handling tests
+│   └── test_property_based.py     # Hypothesis property tests
+├── quyaml_parser.py               # Main parser implementation
+├── requirements.txt               # Python dependencies
+├── pytest.ini                     # Pytest configuration
+├── .gitignore                     # Git ignore rules
+└── README.md                      # This file
 ```
 
 ## Dependencies
 
 - `pyyaml`: YAML parsing
 - `qiskit`: Quantum circuit framework
-- `numpy`: Numerical operations
+- `qiskit-machine-learning`: QML algorithms and feature maps
+- `qiskit-optimization`: Quantum optimization algorithms (QAOA, VQE)
+- `qiskit-aer`: High-performance quantum circuit simulation
+- `numpy`: Numerical operations and parameter evaluation
 - `pytest`: Testing framework
 - `hypothesis`: Property-based testing
 
