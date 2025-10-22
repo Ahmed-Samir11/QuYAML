@@ -2,7 +2,7 @@
 
 ## Token Optimization Release
 
-Released: 2024
+Released: 2025
 
 ### Overview
 
@@ -202,26 +202,10 @@ benchmarks/
 - Replacing JSON for LLM interactions
 - Symbolic parameters are important
 
-**Consider OpenQASM when:**
-- Heavily parameterized circuits
-- Token efficiency is absolutely critical
-- High-volume production workloads
-
-**Never use JSON:**
-- For LLM input (73% worse than QuYAML)
-
-### Future Work
-
-Potential v0.3 improvements:
-- Optional pre-evaluation mode for parameters
-- Ultra-compact mode with single-letter keys
-- Inline array syntax for ops
-- Custom gate definitions
-
 ### Contributors
 
 - Ahmed Samir (Parser implementation and optimization)
-- GitHub Copilot (Benchmark analysis and documentation)
+- Copilot (Analysis and documentation)
 
 ### License
 
