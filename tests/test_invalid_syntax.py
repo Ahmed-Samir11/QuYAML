@@ -16,7 +16,7 @@ def test_unknown_gate():
 def test_out_of_bounds_qubit():
     """Tests that a qubit index outside the register size raises an error."""
     quyaml_string = "qreg: q[2]\ninstructions:\n  - h q[5]"
-    with pytest.raises(QuYamlError, match="Invalid or out-of-bounds qubit index"):
+    with pytest.raises(QuYamlError, match="out of bounds"):
         parse_quyaml_to_qiskit(quyaml_string)
 
 def test_undefined_parameter():

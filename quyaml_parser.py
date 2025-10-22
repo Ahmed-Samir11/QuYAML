@@ -8,7 +8,12 @@ class QuYamlError(Exception):
     pass
 
 def _apply_instruction(qc: QuantumCircuit, inst_str: str, params: dict, line_num: int):
-    """Parses and applies a single QuYAML instruction string."""
+    """Parses and applies a single QuYAML instruction string.
+    
+    Supports both original and optimized syntax:
+    - Original: - h q[0]  or  - cx q[0], q[1]
+    - Optimized: - h 0    or  - cx 0 1
+    """
     if not isinstance(inst_str, str):
         raise QuYamlError(f"Instruction on line {line_num} is not a string.")
 
@@ -41,13 +46,23 @@ def _apply_instruction(qc: QuantumCircuit, inst_str: str, params: dict, line_num
         param_expr = None
     
     def get_indices(target_strings):
+        """Parse qubit indices from either 'q[0]' or '0' format."""
         indices = []
         for s in target_strings:
+            # Check if it's in q[n] format
             match = re.search(r'\[(\d+)\]', s)
-            if match and int(match.group(1)) < qc.num_qubits:
-                indices.append(int(match.group(1)))
+            if match:
+                idx = int(match.group(1))
             else:
-                raise QuYamlError(f"Invalid or out-of-bounds qubit index in '{s}' on line {line_num}.")
+                # Try to parse as plain integer (optimized format)
+                try:
+                    idx = int(s.replace(',', ''))
+                except ValueError:
+                    raise QuYamlError(f"Invalid qubit index '{s}' on line {line_num}. Use 'q[n]' or 'n' format.")
+            
+            if idx >= qc.num_qubits:
+                raise QuYamlError(f"Qubit index {idx} out of bounds (circuit has {qc.num_qubits} qubits) on line {line_num}.")
+            indices.append(idx)
         return indices
 
     targets = [p.replace(',', '') for p in parts[1:]]
@@ -114,6 +129,10 @@ def _apply_instruction(qc: QuantumCircuit, inst_str: str, params: dict, line_num
 def parse_quyaml_to_qiskit(quyaml_string: str) -> QuantumCircuit:
     """
     Parses a QuYAML string with an extended specification into a Qiskit QuantumCircuit object.
+    
+    Supports both original and optimized field names:
+    - Original: qreg, creg, parameters, instructions
+    - Optimized: qubits, bits, params, ops
     """
     try:
         data = yaml.safe_load(quyaml_string)
@@ -123,24 +142,28 @@ def parse_quyaml_to_qiskit(quyaml_string: str) -> QuantumCircuit:
         raise QuYamlError(f"Invalid YAML syntax: {e}")
 
     circuit_name = data.get('circuit', 'my_circuit')
-    params = data.get('parameters', {})
+    
+    # Support both 'parameters' and 'params' (optimized)
+    params = data.get('params', data.get('parameters', {}))
     
     def get_reg_size(reg_str):
         if not reg_str or not isinstance(reg_str, str): return 0
         match = re.search(r'\[(\d+)\]', reg_str)
         return int(match.group(1)) if match else 0
-        
-    q_size = get_reg_size(data.get('qreg'))
-    c_size = get_reg_size(data.get('creg'))
+    
+    # Support both field names
+    q_size = get_reg_size(data.get('qubits', data.get('qreg')))
+    c_size = get_reg_size(data.get('bits', data.get('creg')))
     
     if q_size == 0:
-        raise QuYamlError("QuYAML must define at least one quantum register (qreg).")
+        raise QuYamlError("QuYAML must define at least one quantum register (qreg/qubits).")
         
     qc = QuantumCircuit(q_size, c_size, name=circuit_name)
 
-    instructions = data.get('instructions', [])
+    # Support both 'instructions' and 'ops' (optimized)
+    instructions = data.get('ops', data.get('instructions', []))
     if not isinstance(instructions, list):
-        raise QuYamlError("'instructions' must be a list.")
+        raise QuYamlError("'instructions'/'ops' must be a list.")
         
     for i, inst_str in enumerate(instructions):
         _apply_instruction(qc, inst_str, params, line_num=i+1)

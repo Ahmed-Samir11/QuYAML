@@ -6,34 +6,48 @@
 [![Python](https://img.shields.io/badge/python-3.10%2B-blue)]()
 [![License](https://img.shields.io/badge/license-MIT-blue)]()
 
-This repository contains the official Python parser for the **QuYAML v0.1** specification. It provides a robust, well-tested tool to convert `.quyaml` files or strings into executable Qiskit `QuantumCircuit` objects.
+This repository contains the official Python parser for the **QuYAML v0.2** specification. It provides a robust, well-tested tool to convert `.quyaml` files or strings into executable Qiskit `QuantumCircuit` objects.
 
 ## Why QuYAML?
 
 As we increasingly use Large Language Models (LLMs) to assist in quantum development, the verbosity of standard formats like JSON becomes a bottleneck. QuYAML solves this by being:
 
-- **Token-Efficient**: Achieves **61% fewer tokens** compared to standard Qiskit JSON, saving significant API costs and fitting more complex problems into an LLM's context window
+- **Token-Efficient**: Achieves **73% fewer tokens** compared to standard Qiskit JSON (measured with exact GPT-4 tokenization)
 - **Human-Readable**: Clean, minimal syntax makes it easy for researchers to write, read, and share circuit designs
 - **Structured & Extensible**: Built on YAML, it's easy to extend with new features like metadata and parameters
 - **Production-Ready**: Comprehensive test suite with metamorphic testing ensures mathematical correctness
 
-## QuYAML v0.1 Specification
+## Performance Comparison
 
-A simple example of the QuYAML format:
+Using exact GPT-4 tokenization across 8 diverse quantum circuits:
 
+| Format | Avg Tokens | vs QuYAML | Cost per 100K calls |
+|--------|-----------|-----------|---------------------|
+| **QuYAML (Optimized)** | **87.9** | baseline | **$263.64** |
+| OpenQASM 2.0 | 84.9 | +3.5% | $254.64 (-$9) |
+| JSON (Qiskit) | 325.0 | -73.0% | $975.00 (+$711) |
+
+**Key Findings:**
+- ✅ **73% more efficient than JSON** - Save $711 per 100K API calls
+- ⚠️ **3.5% behind OpenQASM overall** - Trade-off for readability and symbolic parameters
+- ✨ **Wins on simple circuits** - 15.8% better than OpenQASM for non-parameterized circuits
+- 📊 **Loses on parameterized circuits** - 17.2% worse than OpenQASM (pre-evaluated values win)
+
+See [`benchmarks/README.md`](benchmarks/README.md) for detailed analysis.
+
+## QuYAML v0.2 Specification
+
+QuYAML supports both **original** and **optimized** syntax (fully backward compatible):
+
+### Optimized Syntax (Recommended for LLMs)
 ```yaml
-# A simple example: Bell State
-circuit: BellState
-metadata:
-  description: Creates an entangled Bell pair.
-qreg: q[2]
-creg: c[2]
-parameters:
-  # You can define parameters here
-  # theta: 0.5
-instructions:
-  - h q[0]
-  - cx q[0], q[1]
+# Bell State - Maximum token efficiency
+circuit: bell
+qubits: q[2]
+bits: c[2]
+ops:
+  - h 0
+  - cx 0 1
   - measure
 ```
 
@@ -83,22 +97,97 @@ except Exception as e:
 ```python
 from quyaml_parser import parse_quyaml_to_qiskit
 
-quyaml_string = """
-circuit: QAOA_Ansatz
+### Original Syntax (Human-Readable)
+```yaml
+# Bell State - Explicit and descriptive
+circuit: BellState
+metadata:
+  description: Creates an entangled Bell pair
 qreg: q[2]
-parameters:
-  gamma: 0.5
-  beta: 1.2
+creg: c[2]
 instructions:
   - h q[0]
-  - h q[1]
-  - barrier
   - cx q[0], q[1]
-  - ry(2 * $gamma) q[1]
-  - cx q[0], q[1]
+  - measure
+```
+
+### Parameterized Circuits
+```yaml
+# QAOA Ansatz - Supports symbolic parameters
+circuit: qaoa_p1
+qubits: q[2]
+params: {gamma: 0.5, beta: 1.2}
+ops:
+  - h 0
+  - h 1
+  - cphase(2*$gamma) 0 1
+  - rx(2*$beta) 0
+  - rx(2*$beta) 1
+```
+
+## Installation
+
+### Quick Start
+
+```bash
+# Clone the repository
+git clone https://github.com/Ahmed-Samir11/QuYAML.git
+cd QuYAML
+
+# Install dependencies
+pip install -r requirements.txt
+```
+
+### Dependencies
+
+```bash
+pip install pyyaml qiskit numpy
+```
+
+## Usage
+
+### Basic Example
+```python
+from quyaml_parser import parse_quyaml_to_qiskit
+
+# Optimized syntax for token efficiency
+quyaml_string = """
+circuit: bell
+qubits: q[2]
+ops:
+  - h 0
+  - cx 0 1
+"""
+
+try:
+    quantum_circuit = parse_quyaml_to_qiskit(quyaml_string)
+    print("Successfully parsed circuit:")
+    print(quantum_circuit)
+    # Use with Qiskit
+    quantum_circuit.draw('mpl')
+except Exception as e:
+    print(f"Error: {e}")
+```
+
+### Advanced Example: Parameterized QAOA Circuit
+
+```python
+from quyaml_parser import parse_quyaml_to_qiskit
+
+quyaml_string = """
+circuit: QAOA_Ansatz
+qubits: q[2]
+params: {gamma: 0.5, beta: 1.2}
+ops:
+  - h 0
+  - h 1
   - barrier
-  - rx(2 * $beta) q[0]
-  - rx(2 * $beta) q[1]
+  - cx 0 1
+  - ry(2*$gamma) 1
+  - cx 0 1
+  - barrier
+  - rx(2*$beta) 0
+  - rx(2*$beta) 1
 """
 
 qc = parse_quyaml_to_qiskit(quyaml_string)
@@ -135,94 +224,138 @@ Run tests with verbose output:
 pytest -v
 ```
 
-## Benchmark: Token Efficiency
+## Benchmarks
 
-To demonstrate QuYAML's token efficiency against industry standards, run the benchmark:
+### Running Benchmarks
 
 ```bash
-python benchmark_vs_standards.py
+# Recommended: Optimized syntax with exact GPT-4 tokenization
+python benchmarks/benchmark_optimized.py
+
+# Original syntax baseline
+python benchmarks/benchmark_with_tiktoken.py
+
+# Test syntax compatibility
+python benchmarks/test_optimized_syntax.py
 ```
 
-**Results** (5 circuits vs OpenQASM 2.0 and Qiskit JSON):
+### Results Summary
 
-| Circuit                    | OpenQASM | Qiskit JSON | QuYAML | Savings vs JSON |
-|----------------------------|----------|-------------|--------|-----------------|
-| Bell State                 | 40       | 87          | 23     | **73.6%** ↓     |
-| GHZ State (3 qubits)       | 51       | 114         | 26     | **77.2%** ↓     |
-| Parameterized QAOA         | 33       | 99          | 50     | **49.5%** ↓     |
-| QFT (3 qubits)             | 36       | 111         | 43     | **61.3%** ↓     |
-| VQE Ansatz                 | 29       | 76          | 47     | **38.2%** ↓     |
-| **Average**                | **37.8** | **97.4**    | **37.8** | **61.2%** ↓   |
+Using exact GPT-4 tokenization (`tiktoken`) across 8 diverse circuits:
 
-**Key Insights:**
-- QuYAML achieves **61.2% token reduction** vs standard Qiskit JSON serialization
-- QuYAML matches OpenQASM efficiency while providing cleaner syntax for parameterized circuits
-- For simple circuits (Bell, GHZ), QuYAML achieves **73-77% token reduction** vs JSON
-- Massive savings for LLM API costs when defining quantum circuits
+| Circuit Type | OpenQASM | QuYAML | Improvement |
+|-------------|----------|--------|-------------|
+| **Simple Circuits** | 62.8 | 53.5 | **+15.8%** ✓ |
+| Bell State | 46 | 37 | +19.6% |
+| GHZ (3 qubits) | 55 | 46 | +16.4% |
+| Teleportation | 60 | 51 | +15.0% |
+| QFT (3 qubits) | 90 | 79 | +12.2% |
+| **Parameterized** | 107.0 | 125.3 | **-17.2%** ✗ |
+| QAOA (p=1) | 65 | 82 | -26.2% |
+| VQE Ansatz | 78 | 95 | -21.8% |
+| **Overall Average** | **84.9** | **87.9** | **-3.5%** |
 
-> **Note**: Token count is estimated as `len(string) / 4`, following OpenAI's rough guideline. Actual token counts may vary by tokenizer.
+**Compared to JSON:**
+- QuYAML: 87.9 tokens (average)
+- JSON: 325.0 tokens (average)
+- **Reduction: 73.0%** ✓
 
-## QuYAML v0.1 Language Reference
+**Cost Impact** (GPT-4 API @ $0.03/1K tokens):
+- QuYAML vs OpenQASM: -$9 per 100K calls (negligible)
+- QuYAML vs JSON: +$711 per 100K calls (significant savings)
+
+See [`benchmarks/README.md`](benchmarks/README.md) and [`OPTIMIZATION_RESULTS.md`](OPTIMIZATION_RESULTS.md) for detailed analysis.
+
+## QuYAML v0.2 Language Reference
+
+### Field Names (Aliases Supported)
+
+Both original and optimized syntax work identically:
+
+| Feature | Original | Optimized |
+|---------|----------|-----------|
+| Quantum register | `qreg: q[n]` | `qubits: q[n]` |
+| Classical register | `creg: c[n]` | `bits: c[n]` |
+| Parameters | `parameters:` | `params:` |
+| Instructions | `instructions:` | `ops:` |
+| Qubit index | `q[0]` | `0` (implicit) |
 
 ### Required Fields
 
 ```yaml
 circuit: CircuitName         # Circuit identifier
-qreg: q[n]                   # Quantum register (n qubits)
-instructions:                # List of quantum operations
+qubits: q[n]                 # Quantum register (n qubits) [or qreg]
+ops:                         # List of operations [or instructions]
   - gate_name args
 ```
 
 ### Optional Fields
 
 ```yaml
-creg: c[n]                   # Classical register (n bits, required for measurement)
-parameters:                  # Define symbolic parameters
+bits: c[n]                   # Classical register (n bits) [or creg]
+params:                      # Symbolic parameters [or parameters]
   theta: 0.5
   gamma: 1.2
-metadata:                    # Circuit metadata (ignored by parser v0.1)
+metadata:                    # Circuit metadata (optional, ignored by parser)
   description: "Circuit description"
   author: "Your Name"
 ```
 
 ### Supported Gates
 
-| Gate | Syntax | Description |
-|------|--------|-------------|
-| Hadamard | `h q[0]` | Single-qubit Hadamard |
-| Pauli-X | `x q[0]` | Bit flip gate |
-| CNOT | `cx q[0], q[1]` | Controlled-NOT |
-| SWAP | `swap q[0], q[1]` | Swap two qubits |
-| RX | `rx(theta) q[0]` | X-axis rotation |
-| RY | `ry(theta) q[0]` | Y-axis rotation |
-| Controlled-Phase | `cphase(theta) q[0], q[1]` | Controlled phase gate |
-| Barrier | `barrier` | Prevent optimization across barrier |
-| Measure | `measure` or `measure q[0], c[0]` | Measure qubit(s) |
+| Gate | Original Syntax | Optimized Syntax | Description |
+|------|----------------|------------------|-------------|
+| Hadamard | `h q[0]` | `h 0` | Single-qubit Hadamard |
+| Pauli-X | `x q[0]` | `x 0` | Bit flip gate |
+| CNOT | `cx q[0], q[1]` | `cx 0 1` | Controlled-NOT |
+| SWAP | `swap q[0], q[1]` | `swap 0 1` | Swap two qubits |
+| RX | `rx(theta) q[0]` | `rx(theta) 0` | X-axis rotation |
+| RY | `ry(theta) q[0]` | `ry(theta) 0` | Y-axis rotation |
+| Controlled-Phase | `cphase(theta) q[0], q[1]` | `cphase(theta) 0 1` | Controlled phase gate |
+| Barrier | `barrier` | `barrier` | Prevent optimization across barrier |
+| Measure | `measure` | `measure` | Measure all qubits |
 
 ### Parameter Substitution
 
 Use `$variable` to reference parameters, and expressions are evaluated with NumPy:
 
 ```yaml
-parameters:
-  theta: 0.5
-  gamma: 1.2
-instructions:
-  - rx(2 * $theta) q[0]
-  - ry($gamma + pi/4) q[1]
-  - cphase(2 * (pi - $theta)) q[0], q[1]
+params: {theta: 0.5, gamma: 1.2}
+ops:
+  - rx(2*$theta) 0
+  - ry($gamma+pi/4) 1
+  - cphase(2*(pi-$theta)) 0 1
 ```
 
 **Supported constants**: `pi`, `e` (from NumPy)  
 **Supported operators**: `+`, `-`, `*`, `/`, `**` (exponentiation)  
 **Supported functions**: All NumPy functions (e.g., `sin`, `cos`, `sqrt`)
 
+## When to Use QuYAML
+
+### ✅ Use QuYAML When:
+- Defining simple, non-parameterized circuits (15.8% better than OpenQASM)
+- Human readability and symbolic parameters matter
+- Replacing JSON for LLM interactions (73% token reduction)
+- Cost difference is negligible ($0.000090 per circuit call)
+- Working with quantum AI/ML applications
+
+### ⚠️ Consider OpenQASM When:
+- Heavily parameterized circuits with pre-evaluated values
+- Token efficiency is absolutely critical
+- High-volume production workloads (millions of API calls)
+- Legacy integration with OpenQASM ecosystem
+
+### ❌ Never Use JSON:
+- For LLM input (73-81% worse than QuYAML)
+- Use only for structured data storage
+
 ## Roadmap
 
 QuYAML is under active development. Future versions will include:
 
-- **v0.2**: Support for custom gates, multi-qubit gates (Toffoli, Fredkin), and improved error messages
-- **v0.3**: Circuit composition and subcircuit definitions
+- **v0.3**: Support for custom gates, multi-qubit gates (Toffoli, Fredkin), and improved error messages
+- **v0.4**: Circuit composition and subcircuit definitions
 - **v1.0**: Full specification with standardized metadata, versioning, and extended gate library
 
 ## Contributing

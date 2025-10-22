@@ -1,0 +1,128 @@
+﻿python : F:\repos\QuYAML\benchmar
+k_vs_standards.py:35: 
+DeprecationWarning: Treating 
+CircuitInstruction as an 
+iterable is deprecated legacy 
+behavior since Qiskit 1.2, and 
+will be removed in Qiskit 2.0. 
+Instead, use the `operation`, 
+`qubits` and `clbits` named 
+attributes.
+At line:1 char:1
++ python 
+benchmark_vs_standards.py 2>&1 | 
+Out-File -Encoding utf8 bench ...
++ ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~
+    + CategoryInfo          : No 
+   tSpecified: (F:\repos\QuYAML  
+  ...med attributes.:String) [   
+ ], RemoteException
+    + FullyQualifiedErrorId : Na 
+   tiveCommandError
+ 
+  for instruction, qargs, cargs 
+in qc.data:
+================================================================================
+QuYAML vs Industry Standards Benchmark
+================================================================================
+
+Comparing QuYAML against:
+  1. OpenQASM 2.0 (Qiskit's native format)
+  2. Qiskit JSON serialization
+  3. QuYAML
+
+================================================================================
+
+Testing: Bell State...
+  OpenQASM: 40 tokens (162 chars)
+  JSON:     87 tokens (348 chars)
+  QuYAML:   23 tokens (95 chars)
+
+Testing: GHZ State (3 qubits)...
+  OpenQASM: 51 tokens (206 chars)
+  JSON:     114 tokens (458 chars)
+  QuYAML:   26 tokens (107 chars)
+
+Testing: Parameterized QAOA (2 qubits, p=1)...
+  OpenQASM: 33 tokens (132 chars)
+  JSON:     99 tokens (396 chars)
+  QuYAML:   50 tokens (203 chars)
+
+Testing: QFT (3 qubits)...
+  OpenQASM: 36 tokens (146 chars)
+  JSON:     111 tokens (447 chars)
+  QuYAML:   43 tokens (174 chars)
+
+Testing: VQE Ansatz (2 qubits)...
+  OpenQASM: 29 tokens (116 chars)
+  JSON:     76 tokens (307 chars)
+  QuYAML:   47 tokens (190 chars)
+
+================================================================================
+SUMMARY STATISTICS
+================================================================================
+
+OpenQASM 2.0 - Average Token Count: 37.8
+Qiskit JSON  - Average Token Count: 97.4
+QuYAML       - Average Token Count: 37.8
+
+================================================================================
+QuYAML TOKEN EFFICIENCY GAINS
+================================================================================
+
+vs OpenQASM 2.0: +0.0% (QuYAML uses 0.0% fewer tokens)
+vs Qiskit JSON:  +61.2% (QuYAML uses 61.2% fewer tokens)
+
+================================================================================
+DETAILED COMPARISON TABLE
+================================================================================
+
+Circuit                        | QASM     | JSON     | QuYAML   | QASM->QuYAML | JSON->QuYAML
+--------------------------------------------------------------------------------
+Bell State                     |     40   |     87   |     23   |       42.5% |       73.6%
+GHZ State (3 qubits)           |     51   |    114   |     26   |       49.0% |       77.2%
+Parameterized QAOA (2 qubits, p=1) |     33   |     99   |     50   |      -51.5% |       49.5%
+QFT (3 qubits)                 |     36   |    111   |     43   |      -19.4% |       61.3%
+VQE Ansatz (2 qubits)          |     29   |     76   |     47   |      -62.1% |       38.2%
+
+================================================================================
+
+EXAMPLE: Bell State Circuit
+================================================================================
+
+OpenQASM 2.0:
+----------------------------------------
+OPENQASM 2.0;
+include "qelib1.inc";
+qreg q[2];
+creg c[2];
+creg meas[2];
+h q[0];
+cx q[0],q[1];
+barrier q[0],q[1];
+measure q[0] -> meas[0];
+measure q[1] -> meas[1];
+
+Qiskit JSON:
+----------------------------------------
+{"name": "BellState", "num_qubits": 2, "num_clbits": 4, "instructions": [{"name": "h", "qubits": [0], "params": []}, {"name": "cx", "qubits": [0, 1], "params": []}, {"name": "barrier", "qubits": [0, 1], "params": []}, {"name": "measure", "qubits": [0], "params": [], "clbits": [2]}, {"name": "measure", "qubits": [1], "params": [], "clbits": [3]}]}
+
+QuYAML:
+----------------------------------------
+circuit: BellState
+qreg: q[2]
+creg: c[2]
+instructions:
+  - h q[0]
+  - cx q[0], q[1]
+  - measure
+
+================================================================================
+
+CONCLUSION: QuYAML achieves 0.0% token reduction vs OpenQASM
+            and 61.2% token reduction vs JSON!
+
+This makes QuYAML ideal for LLM-driven quantum development,
+reducing API costs and fitting more context into prompts.
+================================================================================
