@@ -23,10 +23,10 @@ Using exact GPT-4 tokenization across 8 diverse quantum circuits:
 
 | Format | Avg Tokens | vs QuYAML | Cost per 100K calls |
 |--------|-----------|-----------|---------------------|
-| OpenQASM 2.0 | 84.9 | **+3.5% better** ✅ | $254.64 (-$9) |
-| OpenQASM 3.0 | 83.9 | **+4.8% better** ✅ | $251.64 (-$12) |
+| OpenQASM 2.0 | 84.9 | **-3.5% better** ✅ | $254.64 (-$9) |
+| OpenQASM 3.0 | 83.9 | **-4.8% better** ✅ | $251.64 (-$12) |
 | **QuYAML (Optimized)** | **87.9** | baseline | **$263.64** |
-| JSON (Qiskit) | 325.0 | -72.9% worse | $975.00 (+$711) |
+| JSON (Qiskit) | 325.0 | **+72.9% worse** ❌ | $975.00 (+$711) |
 
 **Key Findings:**
 - ✅ **73% more efficient than JSON** - Save $711 per 100K API calls vs JSON
@@ -54,52 +54,6 @@ ops:
   - cx 0 1
   - measure
 ```
-
-## Installation
-
-### Quick Start
-
-```bash
-# Clone the repository
-git clone https://github.com/Ahmed-Samir11/QuYAML.git
-cd QuYAML
-
-# Install dependencies
-pip install -r requirements.txt
-```
-
-### Dependencies
-
-```bash
-pip install pyyaml qiskit numpy
-```
-
-## Usage
-
-```python
-from quyaml_parser import parse_quyaml_to_qiskit
-
-quyaml_string = """
-circuit: MyFirstCircuit
-qreg: q[1]
-instructions:
-  - h q[0]
-"""
-
-try:
-    quantum_circuit = parse_quyaml_to_qiskit(quyaml_string)
-    print("Successfully parsed circuit:")
-    print(quantum_circuit)
-    # Use with Qiskit
-    quantum_circuit.draw('mpl')
-except Exception as e:
-    print(f"Error: {e}")
-```
-
-### Advanced Example: Parameterized QAOA Circuit
-
-```python
-from quyaml_parser import parse_quyaml_to_qiskit
 
 ### Original Syntax (Human-Readable)
 ```yaml
@@ -131,8 +85,6 @@ ops:
 
 ## Installation
 
-### Quick Start
-
 ```bash
 # Clone the repository
 git clone https://github.com/Ahmed-Samir11/QuYAML.git
@@ -142,11 +94,7 @@ cd QuYAML
 pip install -r requirements.txt
 ```
 
-### Dependencies
-
-```bash
-pip install pyyaml qiskit numpy
-```
+**Dependencies:** `pyyaml`, `qiskit`, `numpy`
 
 ## Usage
 
@@ -163,14 +111,9 @@ ops:
   - cx 0 1
 """
 
-try:
-    quantum_circuit = parse_quyaml_to_qiskit(quyaml_string)
-    print("Successfully parsed circuit:")
-    print(quantum_circuit)
-    # Use with Qiskit
-    quantum_circuit.draw('mpl')
-except Exception as e:
-    print(f"Error: {e}")
+quantum_circuit = parse_quyaml_to_qiskit(quyaml_string)
+print(quantum_circuit)
+quantum_circuit.draw('mpl')
 ```
 
 ### Advanced Example: Parameterized QAOA Circuit
@@ -361,7 +304,7 @@ If you use QuYAML in your research, please cite:
   title = {QuYAML: A Token-Efficient Standard for Quantum Circuits},
   year = {2025},
   url = {https://github.com/Ahmed-Samir11/QuYAML},
-  version = {0.1.1}
+  version = {0.2.0}
 }
 ```
 
