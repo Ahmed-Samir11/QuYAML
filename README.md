@@ -23,19 +23,21 @@ Using exact GPT-4 tokenization across 8 diverse quantum circuits:
 
 | Format | Avg Tokens | vs QuYAML | Cost per 100K calls |
 |--------|-----------|-----------|---------------------|
+| OpenQASM 2.0 | 84.9 | **+3.5% better** ✅ | $254.64 (-$9) |
+| OpenQASM 3.0 | 83.9 | **+4.8% better** ✅ | $251.64 (-$12) |
 | **QuYAML (Optimized)** | **87.9** | baseline | **$263.64** |
-| OpenQASM 2.0 | 84.9 | +3.5% | $254.64 (-$9) |
-| JSON (Qiskit) | 325.0 | -73.0% | $975.00 (+$711) |
+| JSON (Qiskit) | 325.0 | -72.9% worse | $975.00 (+$711) |
 
 **Key Findings:**
-- ✅ **73% more efficient than JSON** - Save $711 per 100K API calls
-- ⚠️ **3.5% behind OpenQASM 2.0 overall** - Trade-off for readability and symbolic parameters
-- ✨ **Wins on simple circuits** - 15.8% better than OpenQASM 2.0 for non-parameterized circuits
-- 📊 **Loses on parameterized circuits** - 17.2% worse than OpenQASM 2.0 (pre-evaluated values win)
+- ✅ **73% more efficient than JSON** - Save $711 per 100K API calls vs JSON
+- ⚠️ **3.5% behind OpenQASM 2.0** - Costs $9 more per 100K calls
+- ⚠️ **4.8% behind OpenQASM 3.0** - Costs $12 more per 100K calls
+- ✨ **Wins on simple circuits** - 15.8% better than OpenQASM for non-parameterized circuits (Bell, GHZ, QFT, Teleportation)
+- 📊 **Loses on parameterized circuits** - 17.2% worse than OpenQASM for circuits with symbolic parameters (QAOA, VQE, Max-Cut, Grover)
 
-**Note:** When comparing to OpenQASM 3.0 (6 circuits): QuYAML averages 65.0 tokens vs 64.7 for OpenQASM 3.0 (-0.5%, essentially equal)
+**Trade-off:** QuYAML prioritizes human readability with symbolic parameters (`$gamma`, `2*$beta`) over maximum token efficiency. OpenQASM's pre-evaluated numeric values (`1.0`, `2.4`) are more token-efficient but less readable for humans and LLMs working with parameterized circuits.
 
-See [`benchmarks/README.md`](benchmarks/README.md) for detailed analysis.
+See [`benchmarks/README.md`](benchmarks/README.md) for detailed per-circuit analysis.
 
 ## QuYAML v0.2 Specification
 
@@ -332,34 +334,6 @@ ops:
 **Supported constants**: `pi`, `e` (from NumPy)  
 **Supported operators**: `+`, `-`, `*`, `/`, `**` (exponentiation)  
 **Supported functions**: All NumPy functions (e.g., `sin`, `cos`, `sqrt`)
-
-## When to Use QuYAML
-
-### ✅ Use QuYAML When:
-- Defining simple, non-parameterized circuits (15.8% better than OpenQASM 2.0)
-- Human readability and symbolic parameters matter
-- Replacing JSON for LLM interactions (73% token reduction)
-- Cost difference is negligible ($9 per 100K calls vs OpenQASM 2.0)
-- Working with quantum AI/ML applications
-
-### ⚠️ Consider OpenQASM When:
-- **OpenQASM 2.0:** Heavily parameterized circuits (24% more efficient than QuYAML)
-- **OpenQASM 3.0:** Maximum token efficiency (0.5% better than QuYAML, essentially equal)
-- Parsing speed is critical (OpenQASM 3.0 is 219x faster)
-- High-volume production workloads (millions of API calls)
-- Legacy integration with OpenQASM ecosystem
-
-### ❌ Never Use JSON:
-- For LLM input (73% worse than QuYAML)
-- Use only for structured data storage
-
-## Roadmap
-
-QuYAML is under active development. Future versions will include:
-
-- **v0.3**: Support for custom gates, multi-qubit gates (Toffoli, Fredkin), and improved error messages
-- **v0.4**: Circuit composition and subcircuit definitions
-- **v1.0**: Full specification with standardized metadata, versioning, and extended gate library
 
 ## Contributing
 

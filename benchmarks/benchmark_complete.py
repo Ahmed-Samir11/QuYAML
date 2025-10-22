@@ -180,6 +180,141 @@ cx q[2], q[3];""",
         "description": "Variational ansatz"
     },
     
+    "QAOA Max-Cut": {
+        "quyaml": """circuit: maxcut
+qubits: q[4]
+params: {gamma: 0.5, beta: 1.0}
+ops:
+  - h 0
+  - h 1
+  - h 2
+  - h 3
+  - cphase(2*$gamma) 0 1
+  - cphase(2*$gamma) 1 2
+  - cphase(2*$gamma) 2 3
+  - rx(2*$beta) 0
+  - rx(2*$beta) 1
+  - rx(2*$beta) 2
+  - rx(2*$beta) 3""",
+        "openqasm2": """OPENQASM 2.0;
+include "qelib1.inc";
+qreg q[4];
+h q[0];
+h q[1];
+h q[2];
+h q[3];
+cp(1.0) q[0],q[1];
+cp(1.0) q[1],q[2];
+cp(1.0) q[2],q[3];
+rx(2.0) q[0];
+rx(2.0) q[1];
+rx(2.0) q[2];
+rx(2.0) q[3];""",
+        "openqasm3": """OPENQASM 3;
+include "stdgates.inc";
+qubit[4] q;
+h q[0];
+h q[1];
+h q[2];
+h q[3];
+cp(1.0) q[0], q[1];
+cp(1.0) q[1], q[2];
+cp(1.0) q[2], q[3];
+rx(2.0) q[0];
+rx(2.0) q[1];
+rx(2.0) q[2];
+rx(2.0) q[3];""",
+        "description": "Max-Cut problem"
+    },
+    
+    "Grover's Algorithm": {
+        "quyaml": """circuit: grover
+qubits: q[3]
+ops:
+  - h 0
+  - h 1
+  - h 2
+  - x 2
+  - h 2
+  - cx 0 2
+  - cx 1 2
+  - h 2
+  - x 2
+  - h 0
+  - h 1
+  - h 2
+  - x 0
+  - x 1
+  - x 2
+  - h 2
+  - cx 0 2
+  - cx 1 2
+  - h 2
+  - x 0
+  - x 1
+  - x 2
+  - h 0
+  - h 1
+  - h 2""",
+        "openqasm2": """OPENQASM 2.0;
+include "qelib1.inc";
+qreg q[3];
+h q[0];
+h q[1];
+h q[2];
+x q[2];
+h q[2];
+cx q[0],q[2];
+cx q[1],q[2];
+h q[2];
+x q[2];
+h q[0];
+h q[1];
+h q[2];
+x q[0];
+x q[1];
+x q[2];
+h q[2];
+cx q[0],q[2];
+cx q[1],q[2];
+h q[2];
+x q[0];
+x q[1];
+x q[2];
+h q[0];
+h q[1];
+h q[2];""",
+        "openqasm3": """OPENQASM 3;
+include "stdgates.inc";
+qubit[3] q;
+h q[0];
+h q[1];
+h q[2];
+x q[2];
+h q[2];
+cx q[0], q[2];
+cx q[1], q[2];
+h q[2];
+x q[2];
+h q[0];
+h q[1];
+h q[2];
+x q[0];
+x q[1];
+x q[2];
+h q[2];
+cx q[0], q[2];
+cx q[1], q[2];
+h q[2];
+x q[0];
+x q[1];
+x q[2];
+h q[0];
+h q[1];
+h q[2];""",
+        "description": "Search algorithm"
+    },
+    
     "Quantum Teleportation": {
         "quyaml": """circuit: teleport
 qubits: q[3]
