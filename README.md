@@ -29,9 +29,11 @@ Using exact GPT-4 tokenization across 8 diverse quantum circuits:
 
 **Key Findings:**
 - ✅ **73% more efficient than JSON** - Save $711 per 100K API calls
-- ⚠️ **3.5% behind OpenQASM overall** - Trade-off for readability and symbolic parameters
-- ✨ **Wins on simple circuits** - 15.8% better than OpenQASM for non-parameterized circuits
-- 📊 **Loses on parameterized circuits** - 17.2% worse than OpenQASM (pre-evaluated values win)
+- ⚠️ **3.5% behind OpenQASM 2.0 overall** - Trade-off for readability and symbolic parameters
+- ✨ **Wins on simple circuits** - 15.8% better than OpenQASM 2.0 for non-parameterized circuits
+- 📊 **Loses on parameterized circuits** - 17.2% worse than OpenQASM 2.0 (pre-evaluated values win)
+
+**Note:** When comparing to OpenQASM 3.0 (6 circuits): QuYAML averages 65.0 tokens vs 64.7 for OpenQASM 3.0 (-0.5%, essentially equal)
 
 See [`benchmarks/README.md`](benchmarks/README.md) for detailed analysis.
 
@@ -334,20 +336,21 @@ ops:
 ## When to Use QuYAML
 
 ### ✅ Use QuYAML When:
-- Defining simple, non-parameterized circuits (15.8% better than OpenQASM)
+- Defining simple, non-parameterized circuits (15.8% better than OpenQASM 2.0)
 - Human readability and symbolic parameters matter
 - Replacing JSON for LLM interactions (73% token reduction)
-- Cost difference is negligible ($0.000090 per circuit call)
+- Cost difference is negligible ($9 per 100K calls vs OpenQASM 2.0)
 - Working with quantum AI/ML applications
 
 ### ⚠️ Consider OpenQASM When:
-- Heavily parameterized circuits with pre-evaluated values
-- Token efficiency is absolutely critical
+- **OpenQASM 2.0:** Heavily parameterized circuits (24% more efficient than QuYAML)
+- **OpenQASM 3.0:** Maximum token efficiency (0.5% better than QuYAML, essentially equal)
+- Parsing speed is critical (OpenQASM 3.0 is 219x faster)
 - High-volume production workloads (millions of API calls)
 - Legacy integration with OpenQASM ecosystem
 
 ### ❌ Never Use JSON:
-- For LLM input (73-81% worse than QuYAML)
+- For LLM input (73% worse than QuYAML)
 - Use only for structured data storage
 
 ## Roadmap
