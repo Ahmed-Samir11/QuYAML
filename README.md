@@ -2,7 +2,7 @@
 
 **QuYAML is a token-efficient, human-readable data format for defining quantum circuits, designed for the age of AI-driven quantum development.**
 
-[![Tests](https://img.shields.io/badge/tests-14%20passed-brightgreen)]()
+[![Tests](https://img.shields.io/badge/tests-21%20passed-brightgreen)]()
 [![Python](https://img.shields.io/badge/python-3.10%2B-blue)]()
 [![License](https://img.shields.io/badge/license-MIT-blue)]()
 
