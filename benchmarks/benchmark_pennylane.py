@@ -30,6 +30,7 @@ if _ROOT not in sys.path:
 import tiktoken
 from qiskit import qasm3
 from quyaml_parser import parse_quyaml_to_qiskit
+from qiskit import QuantumCircuit
 
 encoder = tiktoken.encoding_for_model("gpt-4")
 
@@ -76,6 +77,45 @@ def circuit_to_qasm3_from_quyaml(quyaml_str: str) -> str:
     """
     qc = parse_quyaml_to_qiskit(quyaml_str)
     return qasm3.dumps(qc)
+
+
+def json_to_qiskit(json_str: str) -> QuantumCircuit:
+    """Decode our compact JSON representation and rebuild a Qiskit circuit.
+
+    Note: This aims to be a fairer comparison by including the reconstruction
+    step (string -> dict -> QuantumCircuit), not just JSON decode time.
+    """
+    data = json.loads(json_str)
+    nq = int(data.get("qubits", 0) or 0)
+    nc = int(data.get("cbits", 0) or 0)
+    qc = QuantumCircuit(nq, nc)
+
+    for gate in data.get("gates", []):
+        name = gate.get("name")
+        q = gate.get("qubits", [])
+        p = gate.get("params", [])
+        if name == "h":
+            qc.h(q[0])
+        elif name == "x":
+            qc.x(q[0])
+        elif name == "cx":
+            qc.cx(q[0], q[1])
+        elif name == "swap":
+            qc.swap(q[0], q[1])
+        elif name == "barrier":
+            qc.barrier()
+        elif name in ("cp", "cphase"):
+            qc.cp(float(p[0]), q[0], q[1])
+        elif name == "rx":
+            qc.rx(float(p[0]), q[0])
+        elif name == "ry":
+            qc.ry(float(p[0]), q[0])
+        elif name == "measure":
+            # Only handle simple measure if classical bits exist
+            if qc.num_clbits > 0 and len(q) == 1:
+                qc.measure(q[0], 0)
+        # else: ignore unknowns silently for fairness
+    return qc
 
 def qaoa_maxcut_ring_quyaml(p: int, n: int = 6) -> str:
     edges = [(i, (i + 1) % n) for i in range(n)]
@@ -321,23 +361,28 @@ for name, data in TESTS.items():
 
     qy_ms = measure_time(parse_quyaml_to_qiskit, qy)
     js_ms = measure_time(json.loads, js)
+    js_rebuild_ms = measure_time(json_to_qiskit, js)
     q3_ms = measure_time(lambda s: qasm3.loads(s), q3)
 
-    rows.append((name, qy_tokens, js_tokens, q3_tokens, qy_ms, js_ms, q3_ms))
+    rows.append((name, qy_tokens, js_tokens, q3_tokens, qy_ms, js_ms, js_rebuild_ms, q3_ms))
 
     print("\n--", name)
     print(
         f"  Tokens -> QuYAML: {qy_tokens:5d} | JSON: {js_tokens:5d} | QASM3: {q3_tokens:5d} | "
         f"QuYAML vs JSON: {((js_tokens-qy_tokens)/js_tokens*100):+.1f}% | QuYAML vs QASM3: {((q3_tokens-qy_tokens)/q3_tokens*100):+.1f}%"
     )
-    print(f"  Parse  -> QuYAML: {qy_ms:6.3f} ms | JSON-decode: {js_ms:6.3f} ms | QASM3-parse: {q3_ms:6.3f} ms")
+    print(
+        f"  Parse  -> QuYAML: {qy_ms:6.3f} ms | JSON-decode: {js_ms:6.3f} ms | "
+        f"JSON-rebuild: {js_rebuild_ms:6.3f} ms | QASM3-parse: {q3_ms:6.3f} ms"
+    )
 
 avg_qy = sum(r[1] for r in rows) / len(rows)
 avg_js = sum(r[2] for r in rows) / len(rows)
 avg_q3 = sum(r[3] for r in rows) / len(rows)
 avg_qy_ms = sum(r[4] for r in rows) / len(rows)
 avg_js_ms = sum(r[5] for r in rows) / len(rows)
-avg_q3_ms = sum(r[6] for r in rows) / len(rows)
+avg_js_rebuild_ms = sum(r[6] for r in rows) / len(rows)
+avg_q3_ms = sum(r[7] for r in rows) / len(rows)
 
 print("\n" + "-" * 80)
 print("AVERAGE TOKENS (across supported tests):")
@@ -349,6 +394,7 @@ print(f"  QuYAML vs QASM3: {(avg_q3-avg_qy)/avg_q3*100:+.1f}% more efficient tha
 print("\nAVERAGE PARSE TIMES:")
 print(f"  QuYAML parse   : {avg_qy_ms:.3f} ms")
 print(f"  JSON decode    : {avg_js_ms:.3f} ms")
+print(f"  JSON rebuild   : {avg_js_rebuild_ms:.3f} ms")
 print(f"  QASM3 parse    : {avg_q3_ms:.3f} ms")
 if unsupported:
     print(f"\nNote: {unsupported} test(s) omitted due to unsupported mid-circuit control in QuYAML v0.2.")
