@@ -11,7 +11,11 @@ OUT = ROOT / "benchmarks" / "_ci_pennylane_results.txt"
 BASELINE = ROOT / "benchmarks" / "pennylane_baseline.json"
 
 AVG_TOKENS_RE = re.compile(r"^\s*QuYAML:\s*([0-9.]+)\s*\n\s*JSON\s*:\s*([0-9.]+)\s*\n\s*QASM3\s*:\s*([0-9.]+)", re.MULTILINE)
-AVG_PARSE_RE = re.compile(r"AVERAGE PARSE TIMES:\s*\n\s*QuYAML parse\s*:\s*([0-9.]+) ms\s*\n\s*JSON decode\s*:\s*([0-9.]+) ms\s*\n\s*QASM3 parse\s*:\s*([0-9.]+) ms", re.MULTILINE)
+# Be resilient to optional lines (e.g., 'JSON rebuild') between decode and QASM3 parse
+AVG_PARSE_RE = re.compile(
+    r"AVERAGE PARSE TIMES:\s*(?:\r?\n)+\s*QuYAML parse\s*:\s*([0-9.]+)\s* ms[\s\S]*?JSON decode\s*:\s*([0-9.]+)\s* ms[\s\S]*?QASM3 parse\s*:\s*([0-9.]+)\s* ms",
+    re.MULTILINE,
+)
 
 
 def run_benchmark() -> str:
