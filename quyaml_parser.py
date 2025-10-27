@@ -113,6 +113,25 @@ def _safe_eval_expression(expr: str, params: Dict[str, Any]) -> float:
     except Exception as e:  # pragma: no cover
         raise QuYamlError(f"Could not evaluate parameter expression '{expr}': {e}")
 
+def _reject_yaml_advanced(quyaml_string: str) -> None:
+    """Reject dangerous/advanced YAML features: anchors (&), aliases (*), and custom tags (!).
+
+    This is a conservative scan that ignores comments and looks for unescaped
+    tokens in the content region of each line. If any are found, raise QuYamlError.
+    """
+    for raw in quyaml_string.splitlines():
+        # strip comments
+        line = raw.split('#', 1)[0]
+        if not line.strip():
+            continue
+        # Look for anchors (&name), aliases (*name), or tags (!tag)
+        if re.search(r"(^|\s)&[A-Za-z0-9_-]+", line):
+            raise QuYamlError("YAML anchors (&name) are not allowed in QuYAML for safety.")
+        if re.search(r"(^|\s)\*[A-Za-z0-9_-]+", line):
+            raise QuYamlError("YAML aliases (*name) are not allowed in QuYAML for safety.")
+        if re.search(r"(^|\s)!\S+", line):
+            raise QuYamlError("YAML custom tags (!tag) are not allowed in QuYAML for safety.")
+
 def _apply_instruction(qc: QuantumCircuit, inst_str: str, params: dict, line_num: int, cond=None):
     """Parses and applies a single QuYAML instruction string.
     
@@ -251,6 +270,7 @@ def parse_quyaml_to_qiskit(quyaml_string: str) -> QuantumCircuit:
     - Optimized: qubits, bits, params, ops
     """
     try:
+        _reject_yaml_advanced(quyaml_string)
         data = yaml.safe_load(quyaml_string)
         if not isinstance(data, dict):
             raise QuYamlError("Top level of QuYAML must be a dictionary.")

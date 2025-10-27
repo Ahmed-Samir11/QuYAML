@@ -334,6 +334,18 @@ Notes and current limitations:
 
 These features are covered by unit tests in `tests/test_v0_3_features.py`.
 
+### YAML safety and restrictions
+
+To keep parsing safe and predictable for both humans and LLMs, the parser enforces a restricted YAML subset:
+
+- Allowed: plain mappings/sequences/scalars used by the QuYAML fields
+- Not allowed: YAML anchors (&name) and aliases (*name)
+- Not allowed: YAML custom tags (!tag)
+
+If any of these are present, parsing will fail with a clear error. We also use `yaml.safe_load` under the hood.
+
+Editor tip: VS Code users get schema validation and completion by opening this repo; it includes `.vscode/settings.json` mapping the QuYAML schema (`docs/schema/quyaml.schema.json`) to `*.quyaml` files.
+
 ## QuYAML v0.2 Language Reference
 
 ### Field Names (Aliases Supported)

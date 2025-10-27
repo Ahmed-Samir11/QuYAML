@@ -11,11 +11,12 @@ OUT = ROOT / "benchmarks" / "_ci_pennylane_results.txt"
 BASELINE = ROOT / "benchmarks" / "pennylane_baseline.json"
 
 AVG_TOKENS_RE = re.compile(r"^\s*QuYAML:\s*([0-9.]+)\s*\n\s*JSON\s*:\s*([0-9.]+)\s*\n\s*QASM3\s*:\s*([0-9.]+)", re.MULTILINE)
-# Be resilient to optional lines (e.g., 'JSON rebuild') between decode and QASM3 parse
+# Be resilient to optional lines; capture three required lines and detect JSON rebuild separately
 AVG_PARSE_RE = re.compile(
     r"AVERAGE PARSE TIMES:\s*(?:\r?\n)+\s*QuYAML parse\s*:\s*([0-9.]+)\s* ms[\s\S]*?JSON decode\s*:\s*([0-9.]+)\s* ms[\s\S]*?QASM3 parse\s*:\s*([0-9.]+)\s* ms",
     re.MULTILINE,
 )
+JSON_REBUILD_RE = re.compile(r"JSON rebuild\s*:\s*([0-9.]+)\s* ms")
 
 
 def run_benchmark() -> str:
@@ -46,6 +47,9 @@ def parse_averages(text: str):
         "JSON": float(mp.group(2)),
         "QASM3": float(mp.group(3)),
     }
+    mr = JSON_REBUILD_RE.search(text)
+    if mr:
+        parse_ms["JSON_REBUILD"] = float(mr.group(1))
     return tokens, parse_ms
 
 
@@ -58,13 +62,15 @@ def main():
         BASELINE.write_text(json.dumps({
             "avg_tokens": tokens,
             "avg_parse_ms": parse_ms,
-            "tolerances": {"tokens_pct": 0.10, "parse_pct": 1.00},
+            # tolerances: tokens_pct (QuYAML tokens), parse_pct (QuYAML parse), parse_rebuild_pct (JSON->Qiskit rebuild)
+            "tolerances": {"tokens_pct": 0.10, "parse_pct": 1.00, "parse_rebuild_pct": 1.00},
         }, indent=2), encoding="utf-8")
         return
 
     base = json.loads(BASELINE.read_text(encoding="utf-8"))
     tol_tokens = float(base.get("tolerances", {}).get("tokens_pct", 0.10))
     tol_parse = float(base.get("tolerances", {}).get("parse_pct", 1.00))
+    tol_parse_rebuild = float(base.get("tolerances", {}).get("parse_rebuild_pct", 1.00))
 
     # Token regression check: QuYAML avg tokens must not exceed baseline by > tol_tokens
     base_qy = float(base["avg_tokens"]["QuYAML"])  
@@ -84,6 +90,23 @@ def main():
     parse_limit = base_qy_ms * (1.0 + tol_parse)
     if cur_qy_ms > parse_limit:
         msgs.append(f"Note: QuYAML parse time increased to {cur_qy_ms:.3f} ms > {parse_limit:.3f} ms limit (baseline {base_qy_ms:.3f}, tol {tol_parse*100:.0f}%).")
+
+    # JSON rebuild hard gate: fail CI if it exceeds tolerance (when baseline has it)
+    base_rebuild = base.get("avg_parse_ms", {}).get("JSON_REBUILD")
+    cur_rebuild = parse_ms.get("JSON_REBUILD")
+    if base_rebuild is None and cur_rebuild is not None:
+        # Upgrade baseline in-place to start tracking JSON_REBUILD without failing this run
+        base.setdefault("avg_parse_ms", {})["JSON_REBUILD"] = cur_rebuild
+        BASELINE.write_text(json.dumps(base, indent=2), encoding="utf-8")
+        msgs.append("Baseline upgraded to include JSON_REBUILD parse metric.")
+    elif base_rebuild is not None and cur_rebuild is not None:
+        base_rebuild = float(base_rebuild)
+        limit_rebuild = base_rebuild * (1.0 + tol_parse_rebuild)
+        if cur_rebuild > limit_rebuild:
+            ok = False
+            msgs.append(
+                f"JSON rebuild regression: {cur_rebuild:.3f} ms > limit {limit_rebuild:.3f} ms (baseline {base_rebuild:.3f}, tol {tol_parse_rebuild*100:.0f}%)."
+            )
 
     for m in msgs:
         print(m)

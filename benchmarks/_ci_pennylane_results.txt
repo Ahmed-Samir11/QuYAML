@@ -1,0 +1,49 @@
+================================================================================
+PENNYLANE-STYLE BENCHMARK: QuYAML vs Qiskit JSON
+================================================================================
+
+-- QAOA Max-Cut p=3 (ring-6)
+  Tokens -> QuYAML:   678 | JSON:   715 | QASM3:   484 | QuYAML vs JSON: 5.2% | QuYAML vs QASM3: -40.1%
+  Parse  -> QuYAML:  8.249 ms | JSON-decode:  0.055 ms | JSON-rebuild:  0.754 ms | QASM3-parse: 28.380 ms
+
+-- QFT (5 qubits)
+  Tokens -> QuYAML:   191 | JSON:   346 | QASM3:   195 | QuYAML vs JSON: 44.8% | QuYAML vs QASM3: 2.1%
+  Parse  -> QuYAML:  2.594 ms | JSON-decode:  0.025 ms | JSON-rebuild:  0.325 ms | QASM3-parse: 11.188 ms
+
+-- Grover (4q oracle=1111)
+  Tokens -> QuYAML:   268 | JSON:   527 | QASM3:   236 | QuYAML vs JSON: 49.1% | QuYAML vs QASM3: -13.6%
+  Parse  -> QuYAML:  3.583 ms | JSON-decode:  0.046 ms | JSON-rebuild:  0.605 ms | QASM3-parse: 14.917 ms
+
+-- Phase Estimation (3+1)
+  Tokens -> QuYAML:   122 | JSON:   225 | QASM3:   126 | QuYAML vs JSON: 45.8% | QuYAML vs QASM3: 3.2%
+  Parse  -> QuYAML:  1.828 ms | JSON-decode:  0.019 ms | JSON-rebuild:  0.282 ms | QASM3-parse:  7.213 ms
+
+-- QAOA Max-Cut p=5 (ring-6)
+  Tokens -> QuYAML:   948 | JSON:  1123 | QASM3:   772 | QuYAML vs JSON: 15.6% | QuYAML vs QASM3: -22.8%
+  Parse  -> QuYAML: 15.736 ms | JSON-decode:  0.078 ms | JSON-rebuild:  1.188 ms | QASM3-parse: 37.873 ms
+
+-- Random entangling layers (n=6, d=4)
+  Tokens -> QuYAML:   738 | JSON:  1152 | QASM3:   718 | QuYAML vs JSON: 35.9% | QuYAML vs QASM3: -2.8%
+  Parse  -> QuYAML:  9.259 ms | JSON-decode:  0.082 ms | JSON-rebuild:  1.134 ms | QASM3-parse: 35.785 ms
+
+-- Quantum-volume-like (n=6, layers=2)
+  Tokens -> QuYAML:   321 | JSON:   540 | QASM3:   362 | QuYAML vs JSON: 40.6% | QuYAML vs QASM3: 11.3%
+  Parse  -> QuYAML:  3.981 ms | JSON-decode:  0.038 ms | JSON-rebuild:  0.584 ms | QASM3-parse: 17.809 ms
+
+-- Conditional full-register equality (2q)
+  Tokens -> QuYAML:   131 | JSON:   442 | QASM3:    90 | QuYAML vs JSON: 70.4% | QuYAML vs QASM3: -45.6%
+  Parse  -> QuYAML:  2.471 ms | JSON-decode:  0.012 ms | JSON-rebuild:  0.141 ms | QASM3-parse:  6.406 ms
+
+--------------------------------------------------------------------------------
+AVERAGE TOKENS (across supported tests):
+  QuYAML: 424.6
+  JSON  : 633.8
+  QASM3 : 372.9
+  QuYAML vs JSON: +33.0% more efficient than JSON
+  QuYAML vs QASM3: -13.9% more efficient than QASM3
+
+AVERAGE PARSE TIMES:
+  QuYAML parse   : 5.963 ms
+  JSON decode    : 0.044 ms
+  JSON rebuild   : 0.627 ms
+  QASM3 parse    : 19.946 ms
