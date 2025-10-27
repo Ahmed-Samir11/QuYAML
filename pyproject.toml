@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "quyaml"
-version = "0.4.0.dev0"
+version = "0.4.0"
 description = "QuYAML: a readable, compact quantum circuit format with Qiskit converter and CLI"
 readme = "README.md"
 authors = [{ name = "Ahmed Samir" }]
@@ -12,7 +12,7 @@ license = { file = "LICENSE" }
 requires-python = ">=3.10"
 dependencies = [
   "pyyaml",
-  "qiskit",
+  "qiskit>=2.0,<2.2",
   "numpy",
 ]
 classifiers = [
@@ -26,3 +26,8 @@ Homepage = "https://github.com/Ahmed-Samir11/QuYAML"
 
 [project.scripts]
 quyaml = "scripts.quyaml_cli:main"
+
+[project.optional-dependencies]
+qasm3 = [
+  "qiskit_qasm3_import",
+]

@@ -177,6 +177,7 @@ quantum_circuit.draw('mpl')
 from quyaml_parser import parse_quyaml_to_qiskit
 
 quyaml_string = """
+version: 0.4
 circuit: QAOA_Ansatz
 qubits: q[2]
 params: {gamma: 0.5, beta: 1.2}
@@ -194,6 +195,7 @@ ops:
 
 qc = parse_quyaml_to_qiskit(quyaml_string)
 print(qc)
+```
 
 ## PennyLane compatibility
 
@@ -238,6 +240,12 @@ pytest
 ```
 
 The project includes comprehensive tests for v0.4 features and QASM3 round-trips.
+
+### Dev setup notes
+
+- QASM3 round-trip tests require the optional OpenQASM 3 loader: `pip install qiskit_qasm3_import`.
+- We pin Qiskit to the 2.x line for compatibility with dynamic circuits and optional integrations: `qiskit>=2.0,<2.2` (see `requirements.txt`).
+- If you use PennyLane’s qiskit plugin, ensure versions are compatible with the Qiskit pin.
 
 1. **Unit Tests** (`tests/test_valid_circuits.py`): Basic circuit parsing with metamorphic testing
 2. **Advanced Circuit Tests** (`tests/test_advanced_circuits.py`): QML feature maps and QAOA ansatz circuits
