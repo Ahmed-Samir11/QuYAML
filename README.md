@@ -8,7 +8,7 @@
 [![QASM3 Import](https://img.shields.io/badge/qasm3%20import-enabled-brightgreen)](https://pypi.org/project/qiskit-qasm3-import/)
 [![Benchmarks](https://github.com/Ahmed-Samir11/QuYAML/actions/workflows/benchmark.yml/badge.svg)](https://github.com/Ahmed-Samir11/QuYAML/actions/workflows/benchmark.yml)
 
-This repository contains the official Python parser for the **QuYAML v0.2** specification. It provides a robust, well-tested tool to convert `.quyaml` files or strings into executable Qiskit `QuantumCircuit` objects.
+This repository contains the official Python parser for the **QuYAML v0.2** specification, with experimental v0.3 features. It provides a robust, well-tested tool to convert `.quyaml` files or strings into executable Qiskit `QuantumCircuit` objects.
 
 ## Why QuYAML?
 
@@ -300,6 +300,39 @@ F:/repos/QuYAML/quyaml/Scripts/python.exe benchmarks/benchmark_pennylane.py
 ```
 
 The latest run output is saved to `benchmarks/_last_pennylane_results.txt`.
+
+## QuYAML v0.3 (experimental)
+
+The v0.3 draft extends the language with two new capabilities. These are implemented in the parser and guarded by simple syntax rules; they are considered experimental and may evolve.
+
+- Mid-circuit measurement into a target classical bit
+- Minimal classical control via if-then-else on a single classical bit
+
+Examples:
+
+```yaml
+version: 0.3
+qubits: q[2]
+bits: c[2]
+ops:
+  - h 0
+  - {measure: {q: 0, c: 0}}   # measure q0 into c0 (mid-circuit)
+  - if:
+      cond: "c[0] == 1"       # single-bit condition (see note below)
+      then:
+        - x 1
+      else:
+        - h 1
+```
+
+Notes and current limitations:
+
+- cond supports only the form: c[i] == 0 or c[i] == 1.
+- The implementation uses Qiskit dynamic-circuit blocks under the hood (`qc.if_test`).
+- Else is optional; if omitted, only the then-branch is created.
+- Mid-circuit measurement requires that you declare a classical register (`bits: c[n]`).
+
+These features are covered by unit tests in `tests/test_v0_3_features.py`.
 
 ## QuYAML v0.2 Language Reference
 

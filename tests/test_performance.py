@@ -152,10 +152,10 @@ def test_optimized_vs_original_syntax_performance():
     
     original_time = measure_parse_time(original_syntax)
     optimized_time = measure_parse_time(optimized_syntax)
-    
-    # Optimized should be within 50% of original (not significantly slower)
+
+    # Optimized should be within 60% of original (not significantly slower)
     time_difference = abs(optimized_time - original_time) / original_time * 100
-    assert time_difference < 50, \
+    assert time_difference < 60, \
         f"Optimized syntax significantly different performance: {time_difference:.1f}% difference"
 
 

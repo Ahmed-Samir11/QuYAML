@@ -113,7 +113,7 @@ def _safe_eval_expression(expr: str, params: Dict[str, Any]) -> float:
     except Exception as e:  # pragma: no cover
         raise QuYamlError(f"Could not evaluate parameter expression '{expr}': {e}")
 
-def _apply_instruction(qc: QuantumCircuit, inst_str: str, params: dict, line_num: int):
+def _apply_instruction(qc: QuantumCircuit, inst_str: str, params: dict, line_num: int, cond=None):
     """Parses and applies a single QuYAML instruction string.
     
     Supports both original and optimized syntax:
@@ -190,31 +190,53 @@ def _apply_instruction(qc: QuantumCircuit, inst_str: str, params: dict, line_num
             angle = _safe_eval_expression(param_expr, params)
 
             if gate_name == 'rx':
-                qc.rx(angle, q_indices[0])
+                ret = qc.rx(angle, q_indices[0])
             elif gate_name == 'ry':
-                qc.ry(angle, q_indices[0])
+                ret = qc.ry(angle, q_indices[0])
             elif gate_name == 'cphase':
-                qc.cp(angle, q_indices[0], q_indices[1])
+                ret = qc.cp(angle, q_indices[0], q_indices[1])
             else:
                 raise QuYamlError(f"Unknown parameterized gate '{gate_name}' on line {line_num}.")
+            if cond is not None and 'ret' in locals() and ret is not None:
+                creg, cval = cond
+                try:
+                    # Some Qiskit versions return InstructionSet without c_if; fallback to last op
+                    if hasattr(ret, 'c_if'):
+                        ret.c_if(creg, cval)
+                    else:
+                        last = qc.data[-1]
+                        last.operation.c_if(creg, cval)
+                except Exception as e:
+                    raise QuYamlError(f"Failed to apply conditional to gate on line {line_num}: {e}")
         
         # Handle non-parameterized gates
         else:
             gate_name = gate_part
+            ret = None
             if gate_name == 'h':
-                qc.h(q_indices[0])
+                ret = qc.h(q_indices[0])
             elif gate_name == 'x':
-                qc.x(q_indices[0])
+                ret = qc.x(q_indices[0])
             elif gate_name == 'cx':
-                qc.cx(q_indices[0], q_indices[1])
+                ret = qc.cx(q_indices[0], q_indices[1])
             elif gate_name == 'swap':
-                qc.swap(q_indices[0], q_indices[1])
+                ret = qc.swap(q_indices[0], q_indices[1])
             elif gate_name == 'barrier':
                 qc.barrier()
             elif gate_name == 'measure':
                 qc.measure_all()
             else:
                 raise QuYamlError(f"Unknown gate '{gate_name}' on line {line_num}.")
+            if cond is not None and ret is not None:
+                creg, cval = cond
+                try:
+                    if hasattr(ret, 'c_if'):
+                        ret.c_if(creg, cval)
+                    else:
+                        last = qc.data[-1]
+                        last.operation.c_if(creg, cval)
+                except Exception as e:
+                    raise QuYamlError(f"Failed to apply conditional to gate on line {line_num}: {e}")
 
     except Exception as e:
         if isinstance(e, QuYamlError): raise e
@@ -263,8 +285,132 @@ def parse_quyaml_to_qiskit(quyaml_string: str) -> QuantumCircuit:
     instructions = data.get('ops', data.get('instructions', []))
     if not isinstance(instructions, list):
         raise QuYamlError("'instructions'/'ops' must be a list.")
-        
-    for i, inst_str in enumerate(instructions):
-        _apply_instruction(qc, inst_str, params, line_num=i+1)
+
+    def _parse_if_block(block: dict, start_line: int):
+        cond_str = block.get('cond')
+        then_ops = block.get('then', [])
+        else_ops = block.get('else', [])
+        if not isinstance(then_ops, list) or (else_ops is not None and not isinstance(else_ops, list)):
+            raise QuYamlError(f"'if' block then/else must be lists (line {start_line}).")
+        if qc.num_clbits == 0:
+            raise QuYamlError("Conditional requires classical bits; define 'bits: c[n]' or 'creg'.")
+
+        creg = qc.cregs[0] if qc.cregs else None
+        if creg is None:
+            raise QuYamlError("No classical register available for conditions.")
+
+        # Supported conditions:
+        # 1) Single bit: c[i] == 0/1
+        # 2) Full-register equality: c == <int> (e.g., 3, 0b101, 0xA)
+        then_val = None
+        single_bit = False
+        s = str(cond_str) if cond_str is not None else ''
+        m_bit = re.match(r"^\s*c\[(\d+)\]\s*==\s*([01])\s*$", s)
+        if m_bit:
+            single_bit = True
+            bit_idx = int(m_bit.group(1))
+            bit_val = int(m_bit.group(2))
+            if bit_idx >= qc.num_clbits:
+                raise QuYamlError(f"Condition references c[{bit_idx}] but circuit has {qc.num_clbits} bits.")
+            then_val = (1 << bit_idx) if bit_val == 1 else 0
+        else:
+            m_reg = re.match(r"^\s*c\s*==\s*(0b[01_]+|0x[0-9a-fA-F_]+|\d+)\s*$", s)
+            if m_reg:
+                lit = m_reg.group(1).replace('_', '')
+                try:
+                    then_val = int(lit, 0)
+                except Exception:
+                    raise QuYamlError(f"Invalid integer literal in condition on line {start_line}.")
+                max_val = (1 << qc.num_clbits)
+                if then_val < 0 or then_val >= max_val:
+                    raise QuYamlError(f"Condition value {then_val} doesn't fit in {qc.num_clbits} classical bits.")
+            else:
+                raise QuYamlError(
+                    f"Unsupported cond syntax in 'if' (line {start_line}). Use 'c[i] == 0/1' or 'c == <int>'."
+                )
+
+        # Build THEN (and optional ELSE) using dynamic-circuit blocks.
+        # Prefer builder contexts when available; otherwise fall back to qc.if_else(true_body, false_body).
+        try:
+            if else_ops:
+                if hasattr(qc, 'else_'):
+                    with qc.if_test((creg, then_val)):
+                        for j, sub in enumerate(then_ops):
+                            if isinstance(sub, str):
+                                _apply_instruction(qc, sub, params, line_num=start_line)
+                            else:
+                                raise QuYamlError("Nested structured ops inside 'then' are not yet supported.")
+                    with qc.else_():
+                        for j, sub in enumerate(else_ops):
+                            if isinstance(sub, str):
+                                _apply_instruction(qc, sub, params, line_num=start_line)
+                            else:
+                                raise QuYamlError("Nested structured ops inside 'else' are not yet supported.")
+                else:
+                    # Fallback: construct body circuits and use if_else API
+                    from qiskit import QuantumCircuit as _QC
+                    t_body = _QC(qc.num_qubits, qc.num_clbits)
+                    f_body = _QC(qc.num_qubits, qc.num_clbits)
+                    for sub in then_ops:
+                        if isinstance(sub, str):
+                            _apply_instruction(t_body, sub, params, line_num=start_line)
+                        else:
+                            raise QuYamlError("Nested structured ops inside 'then' are not yet supported.")
+                    for sub in else_ops:
+                        if isinstance(sub, str):
+                            _apply_instruction(f_body, sub, params, line_num=start_line)
+                        else:
+                            raise QuYamlError("Nested structured ops inside 'else' are not yet supported.")
+                    qc.if_else((creg, then_val), t_body, f_body, qc.qubits, qc.clbits)
+            else:
+                # Only THEN branch
+                if hasattr(qc, 'if_test'):
+                    with qc.if_test((creg, then_val)):
+                        for j, sub in enumerate(then_ops):
+                            if isinstance(sub, str):
+                                _apply_instruction(qc, sub, params, line_num=start_line)
+                            else:
+                                raise QuYamlError("Nested structured ops inside 'then' are not yet supported.")
+                else:
+                    from qiskit import QuantumCircuit as _QC
+                    t_body = _QC(qc.num_qubits, qc.num_clbits)
+                    for sub in then_ops:
+                        if isinstance(sub, str):
+                            _apply_instruction(t_body, sub, params, line_num=start_line)
+                        else:
+                            raise QuYamlError("Nested structured ops inside 'then' are not yet supported.")
+                    qc.if_else((creg, then_val), t_body, None, qc.qubits, qc.clbits)
+        except Exception as e:
+            raise QuYamlError(f"Failed to build conditional block: {e}")
+
+    for i, inst in enumerate(instructions):
+        # Support string instructions (existing) and structured dict ops for v0.3 features
+        if isinstance(inst, str):
+            _apply_instruction(qc, inst, params, line_num=i+1)
+        elif isinstance(inst, dict):
+            if 'measure' in inst:
+                # Structured mid-circuit measure: {'measure': {'q': i, 'c': j}}
+                spec = inst['measure']
+                if not isinstance(spec, dict) or 'q' not in spec or 'c' not in spec:
+                    raise QuYamlError(f"Invalid 'measure' spec on line {i+1}. Expected {{q: int, c: int}}.")
+                if qc.num_clbits == 0:
+                    raise QuYamlError("Structured measure requires classical bits; define 'bits: c[n]'.")
+                q_i = int(spec['q'])
+                c_i = int(spec['c'])
+                if q_i >= qc.num_qubits or c_i >= qc.num_clbits:
+                    raise QuYamlError(f"Measure indices out of bounds on line {i+1}.")
+                try:
+                    qc.measure(q_i, c_i)
+                except Exception as e:
+                    raise QuYamlError(f"Failed to apply measure on line {i+1}: {e}")
+            elif 'if' in inst:
+                block = inst['if']
+                if not isinstance(block, dict):
+                    raise QuYamlError(f"Invalid 'if' block on line {i+1}.")
+                _parse_if_block(block, start_line=i+1)
+            else:
+                raise QuYamlError(f"Unknown structured op on line {i+1}. Supported: 'measure', 'if'.")
+        else:
+            raise QuYamlError(f"Instruction on line {i+1} must be string or object.")
         
     return qc
