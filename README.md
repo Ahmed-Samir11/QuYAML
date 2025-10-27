@@ -258,12 +258,18 @@ We also evaluated a set of harder, PennyLane-style circuits (QAOA Max-Cut, QFT, 
 - Tokens are counted for the QuYAML source, a compact Qiskit JSON representation, and OpenQASM 3 generated from the same circuit.
 - Parse times measure: QuYAML parse (QuYAML → Qiskit), JSON decode only, and QASM3 parse via Qiskit’s `qasm3.loads`.
 
-Average across all tests:
+Update (includes v0.3 control-flow case and JSON→Qiskit rebuild timing):
 
-- Tokens: QuYAML 466.6, JSON 661.1, QASM3 413.3
-- QuYAML vs JSON: +29.4% fewer tokens than JSON
-- QuYAML vs QASM3: −12.9% more tokens than QASM3 (QASM3 wins on average)
-- Parse times (ms): QuYAML 5.546, JSON 0.051, QASM3 25.105
+- New case: Conditional full-register equality (2q)
+  - Tokens: QuYAML 131, JSON 442, QASM3 90
+  - Parse times (ms): QuYAML 3.545, JSON decode 0.013, JSON rebuild 0.168, QASM3 parse 8.464
+
+Refreshed averages across all tests:
+
+- Tokens: QuYAML 424.6, JSON 633.8, QASM3 372.9
+- QuYAML vs JSON: +33.0% fewer tokens than JSON
+- QuYAML vs QASM3: −13.9% more tokens than QASM3 (QASM3 wins on average)
+- Parse times (ms): QuYAML 6.269, JSON decode 0.051, JSON rebuild 0.672, QASM3 parse 21.475
 
 Per-circuit token counts and deltas:
 
@@ -300,6 +306,24 @@ F:/repos/QuYAML/quyaml/Scripts/python.exe benchmarks/benchmark_pennylane.py
 ```
 
 The latest run output is saved to `benchmarks/_last_pennylane_results.txt`.
+
+### CLI utilities
+
+A tiny CLI is provided for validation, token counting, and timing. Read from a file or use `-` for stdin.
+
+```powershell
+# Validate and print a summary
+F:/repos/QuYAML/quyaml/Scripts/python.exe scripts/quyaml_cli.py validate examples/bell.quyaml --summary
+
+# Count tokens (QuYAML only)
+Get-Content examples/bell.quyaml | F:/repos/QuYAML/quyaml/Scripts/python.exe scripts/quyaml_cli.py count-tokens -
+
+# Count tokens including JSON and QASM3 representations
+F:/repos/QuYAML/quyaml/Scripts/python.exe scripts/quyaml_cli.py count-tokens examples/bell.quyaml --json --qasm3
+
+# Measure average parse time (ms) over N iterations
+F:/repos/QuYAML/quyaml/Scripts/python.exe scripts/quyaml_cli.py time-parse examples/bell.quyaml -n 200
+```
 
 ## QuYAML v0.3 (experimental)
 
