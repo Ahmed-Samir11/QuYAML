@@ -2,10 +2,116 @@ import yaml
 from qiskit import QuantumCircuit
 import re
 import numpy as np
+import ast
+from typing import Any, Dict
+
+try:
+    # Optional safe evaluator; used if available
+    from asteval import Interpreter as _AEInterpreter  # type: ignore
+except Exception:  # pragma: no cover
+    _AEInterpreter = None
 
 class QuYamlError(Exception):
     """Custom exception for QuYAML parsing errors."""
     pass
+
+
+def _safe_eval_expression(expr: str, params: Dict[str, Any]) -> float:
+    """Safely evaluate a small arithmetic expression used in parameterized gates.
+
+    Security notes:
+    - Replaces `$name` occurrences with their numeric values from params.
+    - Supports a tiny subset of arithmetic and constants (pi, e) by default.
+    - If `asteval` is available, use it with a tightly constrained symbol table.
+      Otherwise, fall back to a minimal AST walker that only permits
+      numeric constants, +, -, *, /, ** and parentheses, and names {pi, e}.
+    """
+    # 1) Substitute parameters like $theta -> value
+    eval_expr = expr
+    for param_name, param_value in params.items():
+        eval_expr = eval_expr.replace(f"${param_name}", str(param_value))
+
+    # 2) If asteval is available, prefer it with a restricted symtable
+    if _AEInterpreter is not None:
+        sym = {
+            # constants
+            "pi": float(np.pi),
+            "e": float(np.e),
+            # common funcs (extend conservatively as needed)
+            "sin": np.sin,
+            "cos": np.cos,
+            "tan": np.tan,
+            "sqrt": np.sqrt,
+            "exp": np.exp,
+            "log": np.log,
+            "abs": abs,
+        }
+        ae = _AEInterpreter(symtable=sym, minimal=True)
+        out = ae(eval_expr)
+        if len(ae.error) > 0:
+            raise QuYamlError(f"Could not evaluate parameter expression '{expr}': {ae.error[0].get_error()}")
+        try:
+            return float(out)
+        except Exception as e:
+            raise QuYamlError(f"Parameter expression '{expr}' did not evaluate to a number: {e}")
+
+    # 3) Fallback: very small AST-based evaluator (no function calls)
+    allowed_nodes = (
+        ast.Expression, ast.BinOp, ast.UnaryOp, ast.Num, ast.Constant,
+        ast.Add, ast.Sub, ast.Mult, ast.Div, ast.Pow, ast.USub, ast.UAdd,
+        ast.Load, ast.Name, ast.Mod,
+    )
+
+    def _eval(node):
+        if not isinstance(node, allowed_nodes):
+            raise QuYamlError(f"Unsupported expression element in '{expr}' ({type(node).__name__}).")
+        if isinstance(node, ast.Expression):
+            return _eval(node.body)
+        if isinstance(node, ast.Num):  # Py<3.8
+            return float(node.n)
+        if isinstance(node, ast.Constant):  # Py3.8+
+            if isinstance(node.value, (int, float)):
+                return float(node.value)
+            raise QuYamlError(f"Non-numeric constant in '{expr}'.")
+        if isinstance(node, ast.Name):
+            if node.id == 'pi':
+                return float(np.pi)
+            if node.id == 'e':
+                return float(np.e)
+            raise QuYamlError(f"Unknown symbol '{node.id}' in '{expr}'.")
+        if isinstance(node, ast.UnaryOp):
+            val = _eval(node.operand)
+            if isinstance(node.op, ast.UAdd):
+                return +val
+            if isinstance(node.op, ast.USub):
+                return -val
+            raise QuYamlError(f"Unsupported unary operator in '{expr}'.")
+        if isinstance(node, ast.BinOp):
+            left = _eval(node.left)
+            right = _eval(node.right)
+            if isinstance(node.op, ast.Add):
+                return left + right
+            if isinstance(node.op, ast.Sub):
+                return left - right
+            if isinstance(node.op, ast.Mult):
+                return left * right
+            if isinstance(node.op, ast.Div):
+                return left / right
+            if isinstance(node.op, ast.Pow):
+                return left ** right
+            if isinstance(node.op, ast.Mod):
+                return left % right
+            raise QuYamlError(f"Unsupported binary operator in '{expr}'.")
+        raise QuYamlError(f"Unsupported expression in '{expr}'.")
+
+    try:
+        tree = ast.parse(eval_expr, mode='eval')
+        value = _eval(tree)
+        return float(value)
+    except QuYamlError:
+        raise
+    except Exception as e:  # pragma: no cover
+        raise QuYamlError(f"Could not evaluate parameter expression '{expr}': {e}")
 
 def _apply_instruction(qc: QuantumCircuit, inst_str: str, params: dict, line_num: int):
     """Parses and applies a single QuYAML instruction string.
@@ -80,20 +186,8 @@ def _apply_instruction(qc: QuantumCircuit, inst_str: str, params: dict, line_num
                 if pname not in params:
                     raise QuYamlError(f"Parameter '{pname}' not defined in parameters block.")
             
-            # Evaluate the parameter expression
-            # Replace parameters with their values
-            eval_expr = param_expr
-            for param_name, param_value in params.items():
-                eval_expr = eval_expr.replace(f'${param_name}', str(param_value))
-            
-            # Replace pi with np.pi
-            eval_expr = eval_expr.replace('pi', 'np.pi')
-            
-            # Evaluate the expression
-            try:
-                angle = eval(eval_expr, {"__builtins__": None}, {"np": np})
-            except Exception as e:
-                raise QuYamlError(f"Could not evaluate parameter expression '{param_expr}': {e}")
+            # Evaluate the parameter expression safely
+            angle = _safe_eval_expression(param_expr, params)
 
             if gate_name == 'rx':
                 qc.rx(angle, q_indices[0])
@@ -140,6 +234,11 @@ def parse_quyaml_to_qiskit(quyaml_string: str) -> QuantumCircuit:
             raise QuYamlError("Top level of QuYAML must be a dictionary.")
     except yaml.YAMLError as e:
         raise QuYamlError(f"Invalid YAML syntax: {e}")
+
+    # Version gate (optional for now; accept 0.2/0.3, reject others)
+    version = data.get('version')
+    if version is not None and str(version) not in {'0.2', '0.3'}:
+        raise QuYamlError(f"Unsupported QuYAML version '{version}'. Supported versions: 0.2, 0.3.")
 
     circuit_name = data.get('circuit', 'my_circuit')
     

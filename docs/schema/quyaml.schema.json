@@ -1,0 +1,36 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ahmed-samir11.github.io/QuYAML/quyaml.schema.json",
+  "title": "QuYAML v0.2/v0.3 (draft)",
+  "type": "object",
+  "additionalProperties": true,
+  "properties": {
+    "version": {
+      "type": ["string", "number"],
+      "enum": ["0.2", "0.3", 0.2, 0.3],
+      "description": "QuYAML spec version (optional in v0.2, recommended for v0.3)"
+    },
+    "circuit": { "type": "string" },
+    "qreg": { "type": "string", "pattern": "^q\\\\[\\\\d+\\\\]$" },
+    "creg": { "type": "string", "pattern": "^c\\\\[\\\\d+\\\\]$" },
+    "qubits": { "type": "string", "pattern": "^q\\\\[\\\\d+\\\\]$" },
+    "bits": { "type": "string", "pattern": "^c\\\\[\\\\d+\\\\]$" },
+    "params": { "type": "object", "additionalProperties": { "type": ["number", "string"] } },
+    "parameters": { "type": "object", "additionalProperties": { "type": ["number", "string"] } },
+    "ops": {
+      "type": "array",
+      "items": { "type": ["string", "object"] },
+      "description": "Optimized instruction list (strings) or future object forms"
+    },
+    "instructions": {
+      "type": "array",
+      "items": { "type": ["string", "object"] }
+    }
+  },
+  "oneOf": [
+    { "required": ["qreg", "instructions"] },
+    { "required": ["qubits", "ops"] },
+    { "required": ["qubits", "instructions"] },
+    { "required": ["qreg", "ops"] }
+  ]
+}
