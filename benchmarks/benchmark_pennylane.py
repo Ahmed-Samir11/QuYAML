@@ -18,6 +18,8 @@ import time
 from typing import Dict
 import os
 import sys
+import random
+import math
 
 # Ensure repository root is on path when running directly
 _HERE = os.path.dirname(__file__)
@@ -65,6 +67,64 @@ def circuit_to_json_from_quyaml(quyaml_str: str) -> str:
                 params.append(str(p))
         data["gates"].append({"name": op.name, "qubits": qidx, "params": params})
     return json.dumps(data, separators=(",", ":"))
+
+def qaoa_maxcut_ring_quyaml(p: int, n: int = 6) -> str:
+    edges = [(i, (i + 1) % n) for i in range(n)]
+    params = []
+    for layer in range(1, p + 1):
+        params.append((f"g{layer}", round(0.2 + 0.2 * layer, 3)))
+        params.append((f"b{layer}", round(0.5 + 0.2 * layer, 3)))
+    params_str = ", ".join(f"{k}: {v}" for k, v in params)
+
+    lines = [
+        f"circuit: qaoa_maxcut_p{p}",
+        f"qubits: q[{n}]",
+        f"params: {{{params_str}}}",
+        "ops:",
+    ]
+    for i in range(n):
+        lines.append(f"  - h {i}")
+    for layer in range(1, p + 1):
+        for u, v in edges:
+            lines.append(f"  - cphase(2*$g{layer}) {u} {v}")
+        for i in range(n):
+            lines.append(f"  - rx(2*$b{layer}) {i}")
+    return "\n".join(lines)
+
+
+def random_entangling_layers_quyaml(n: int = 6, depth: int = 4, seed: int = 7) -> str:
+    rnd = random.Random(seed)
+    lines = [f"circuit: random_layers_{n}_{depth}", f"qubits: q[{n}]", "ops:"]
+    for _ in range(depth):
+        for i in range(n):
+            a = round(rnd.random() * math.pi, 3)
+            b = round(rnd.random() * math.pi, 3)
+            lines.append(f"  - rx({a}) {i}")
+            lines.append(f"  - ry({b}) {i}")
+        for i in range(n):
+            j = (i + 1) % n
+            lines.append(f"  - cx {i} {j}")
+    return "\n".join(lines)
+
+
+def shallow_quantum_volume_like_quyaml(n: int = 6, layers: int = 2, seed: int = 11) -> str:
+    rnd = random.Random(seed)
+    lines = [f"circuit: qv_like_{n}_{layers}", f"qubits: q[{n}]", "ops:"]
+    for _ in range(layers):
+        perm = list(range(n))
+        rnd.shuffle(perm)
+        for k in range(0, n - 1, 2):
+            a, b = perm[k], perm[k + 1]
+            r1 = round(rnd.random() * math.pi, 3)
+            r2 = round(rnd.random() * math.pi, 3)
+            r3 = round(rnd.random() * math.pi, 3)
+            lines.append(f"  - cx {a} {b}")
+            lines.append(f"  - ry({r1}) {a}")
+            lines.append(f"  - rx({r2}) {b}")
+            lines.append(f"  - cx {a} {b}")
+            lines.append(f"  - ry({r3}) {a}")
+        lines.append("  - barrier")
+    return "\n".join(lines)
 
 
 TESTS: Dict[str, Dict[str, str]] = {
@@ -217,6 +277,15 @@ ops:
   - h 2
 """
     },
+    "QAOA Max-Cut p=5 (ring-6)": {
+        "quyaml": qaoa_maxcut_ring_quyaml(p=5, n=6),
+    },
+    "Random entangling layers (n=6, d=4)": {
+        "quyaml": random_entangling_layers_quyaml(n=6, depth=4, seed=7),
+    },
+    "Quantum-volume-like (n=6, layers=2)": {
+        "quyaml": shallow_quantum_volume_like_quyaml(n=6, layers=2, seed=11),
+    },
 }
 
 
@@ -225,8 +294,15 @@ print("PENNYLANE-STYLE BENCHMARK: QuYAML vs Qiskit JSON")
 print("=" * 80)
 
 rows = []
+unsupported = 0
 for name, data in TESTS.items():
-    qy = data["quyaml"].strip()
+    qy_val = data.get("quyaml")
+    if qy_val is None:
+        print("\n--", name)
+        print("  QuYAML: UNSUPPORTED (requires mid-circuit measure/control-flow)")
+        unsupported += 1
+        continue
+    qy = qy_val.strip()
     js = circuit_to_json_from_quyaml(qy)
 
     qy_tokens = count_tokens(qy)
@@ -245,7 +321,9 @@ avg_qy = sum(r[1] for r in rows) / len(rows)
 avg_js = sum(r[2] for r in rows) / len(rows)
 
 print("\n" + "-" * 80)
-print("AVERAGE TOKENS:")
+print("AVERAGE TOKENS (across supported tests):")
 print(f"  QuYAML: {avg_qy:.1f}")
 print(f"  JSON  : {avg_js:.1f}")
 print(f"  QuYAML vs JSON: {(avg_js-avg_qy)/avg_js*100:+.1f}% more efficient than JSON")
+if unsupported:
+    print(f"\nNote: {unsupported} test(s) omitted due to unsupported mid-circuit control in QuYAML v0.2.")
