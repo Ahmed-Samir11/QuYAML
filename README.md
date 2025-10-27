@@ -139,6 +139,38 @@ ops:
 
 qc = parse_quyaml_to_qiskit(quyaml_string)
 print(qc)
+
+## PennyLane compatibility
+
+QuYAML circuits can be used directly with PennyLane via an optional helper:
+
+```python
+import pennylane as qml
+from quyaml_pennylane import parse_quyaml_to_pennylane
+
+quyaml_string = """
+circuit: bell
+qubits: q[2]
+ops:
+  - h 0
+  - cx 0 1
+"""
+
+my_template = parse_quyaml_to_pennylane(quyaml_string)  # returns a PennyLane quantum function
+
+dev = qml.device("default.qubit", wires=2)
+
+@qml.qnode(dev)
+def pl_circuit():
+    my_template(wires=[0, 1])
+    return qml.expval(qml.Z(0))
+
+print(pl_circuit())
+```
+
+Notes:
+- Requires installing optional dependencies: `pip install pennylane pennylane-qiskit`
+- Under the hood, QuYAML -> Qiskit QuantumCircuit -> PennyLane via `qml.from_qiskit()`
 ```
 
 ## Testing & Verification
