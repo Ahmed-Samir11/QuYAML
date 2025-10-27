@@ -1,5 +1,6 @@
 pyyaml
-qiskit
+qiskit>=2.0,<2.2
+qiskit_qasm3_import
 qiskit-machine-learning
 qiskit-optimization
 qiskit-aer
