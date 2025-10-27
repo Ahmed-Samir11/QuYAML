@@ -1,0 +1,1 @@
+{"circuit":"my_circuit","qubits":2,"cbits":0,"gates":[{"name":"h","qubits":[0],"params":[]},{"name":"cx","qubits":[0,1],"params":[]}]}

@@ -1,0 +1,5 @@
+version: 0.4
+qubits: q[2]
+ops:
+  - h 0
+  - cx 1 0

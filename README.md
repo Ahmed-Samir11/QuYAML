@@ -1,6 +1,6 @@
-# QuYAML: A Human-Readable Standard for Quantum Circuits
+# QuYAML v0.4: A Human-Readable Standard for Quantum Circuits
 
-**QuYAML is a token-efficient, human-readable data format for defining quantum circuits, designed for the age of AI-driven quantum development.**
+QuYAML is a token-efficient, human-readable data format for defining quantum circuits, designed for the age of AI-driven quantum development.
 
 [![Tests](https://img.shields.io/badge/tests-21%20passed-brightgreen)]()
 [![Python](https://img.shields.io/badge/python-3.10%2B-blue)]()
@@ -8,7 +8,15 @@
 [![QASM3 Import](https://img.shields.io/badge/qasm3%20import-enabled-brightgreen)](https://pypi.org/project/qiskit-qasm3-import/)
 [![Benchmarks](https://github.com/Ahmed-Samir11/QuYAML/actions/workflows/benchmark.yml/badge.svg)](https://github.com/Ahmed-Samir11/QuYAML/actions/workflows/benchmark.yml)
 
-This repository contains the official Python parser for the **QuYAML v0.2** specification, with experimental v0.3 features. It provides a robust, well-tested tool to convert `.quyaml` files or strings into executable Qiskit `QuantumCircuit` objects.
+This repository contains the official Python tooling for the QuYAML format. The parser now targets the **v0.4** specification by default, with a legacy opt-in for v0.2/0.3. It converts `.quyaml` files or strings into executable Qiskit `QuantumCircuit` objects and provides a CLI for validation, conversion, diffs, and benchmarking.
+
+Highlights in v0.4:
+- Structured control flow: if/elif/else, while, and for blocks
+- Composite conditions with `&&` and `||` (lowered to Qiskit dynamic-circuit builders)
+- Safer YAML surface: rejects anchors, aliases, custom tags, and merge keys
+- Strict schema and canonical formatter; JSON Schema shipped in `docs/schema/quyaml.schema.json`
+- CLI: validate, lint, format, convert (QuYAML↔QASM3), diff (human/JSON), compile (compact JSON)
+- CI-friendly parse-time gates and token-count gates
 
 ## Why QuYAML?
 
@@ -41,13 +49,14 @@ Using exact GPT-4 tokenization across 8 diverse quantum circuits:
 
 See [`benchmarks/README.md`](benchmarks/README.md) for detailed per-circuit analysis.
 
-## QuYAML v0.2 Specification
+## QuYAML v0.4 at a glance
 
 QuYAML supports both **original** and **optimized** syntax (fully backward compatible):
 
 ### Optimized Syntax (Recommended for LLMs)
 ```yaml
-# Bell State - Maximum token efficiency
+# Bell state – minimal and token-efficient
+version: 0.4
 circuit: bell
 qubits: q[2]
 bits: c[2]
@@ -59,7 +68,8 @@ ops:
 
 ### Original Syntax (Human-Readable)
 ```yaml
-# Bell State - Explicit and descriptive
+# Bell state – explicit and descriptive
+version: 0.4
 circuit: BellState
 metadata:
   description: Creates an entangled Bell pair
@@ -71,9 +81,9 @@ instructions:
   - measure
 ```
 
-### Parameterized Circuits
+### Parameterized circuits
 ```yaml
-# QAOA Ansatz - Supports symbolic parameters
+version: 0.4
 circuit: qaoa_p1
 qubits: q[2]
 params: {gamma: 0.5, beta: 1.2}
@@ -84,6 +94,49 @@ ops:
   - rx(2*$beta) 0
   - rx(2*$beta) 1
 ```
+
+### Control flow (new in v0.4)
+
+Conditional blocks with composite conditions:
+
+```yaml
+version: 0.4
+qubits: q[2]
+bits: c[2]
+ops:
+  - h 0
+  - {measure: {q: 0, c: 0}}
+  - if:
+      cond: "c[0] == 1 && c[1] == 0"   # && and || supported
+      then:
+        - x 1
+      else:
+        - h 1
+```
+
+While and for-loops:
+
+```yaml
+version: 0.4
+qubits: q[1]
+bits: c[1]
+ops:
+  - reset 0         # string form
+  - while:
+      cond: "c[0] == 0"
+      body:
+        - h 0
+        - {measure: {q: 0, c: 0}}
+  - for:
+      range: [0, 3]  # start, stop (exclusive)
+      body:
+        - rx(pi/4) 0
+```
+
+Reset and measure forms:
+
+- `reset 0` or `{reset: {q: 0}}`
+- `measure` (all qubits) or `{measure: {q: 0, c: 0}}` for mid-circuit bit-targeted measurement
 
 ## Installation
 
@@ -96,7 +149,7 @@ cd QuYAML
 pip install -r requirements.txt
 ```
 
-**Dependencies:** `pyyaml`, `qiskit`, `numpy`
+Dependencies: `pyyaml`, `qiskit`, `numpy` (plus optional: `tiktoken`, `jsonschema`)
 
 ## Usage
 
@@ -118,7 +171,7 @@ print(quantum_circuit)
 quantum_circuit.draw('mpl')
 ```
 
-### Advanced Example: Parameterized QAOA Circuit
+### Advanced example: Parameterized QAOA circuit
 
 ```python
 from quyaml_parser import parse_quyaml_to_qiskit
@@ -175,7 +228,7 @@ Notes:
 - Under the hood, QuYAML -> Qiskit QuantumCircuit -> PennyLane via `qml.from_qiskit()`
 ```
 
-## Testing & Verification
+## Testing & verification
 
 To verify the parser's correctness, install the test dependencies and run pytest:
 
@@ -184,7 +237,7 @@ pip install -r requirements.txt
 pytest
 ```
 
-The project includes comprehensive test coverage with **14 tests, 100% passing**:
+The project includes comprehensive tests for v0.4 features and QASM3 round-trips.
 
 1. **Unit Tests** (`tests/test_valid_circuits.py`): Basic circuit parsing with metamorphic testing
 2. **Advanced Circuit Tests** (`tests/test_advanced_circuits.py`): QML feature maps and QAOA ansatz circuits
@@ -307,56 +360,73 @@ F:/repos/QuYAML/quyaml/Scripts/python.exe benchmarks/benchmark_pennylane.py
 
 The latest run output is saved to `benchmarks/_last_pennylane_results.txt`.
 
-### CLI utilities
+## CLI utilities
 
-A tiny CLI is provided for validation, token counting, and timing. Read from a file or use `-` for stdin.
+The CLI supports validate, lint, format, convert (QuYAML↔QASM3), diff, compile (compact JSON), count-tokens, and time-parse. Use a file path or `-` for stdin.
 
 ```powershell
 # Validate and print a summary
 F:/repos/QuYAML/quyaml/Scripts/python.exe scripts/quyaml_cli.py validate examples/bell.quyaml --summary
 
-# Count tokens (QuYAML only)
-Get-Content examples/bell.quyaml | F:/repos/QuYAML/quyaml/Scripts/python.exe scripts/quyaml_cli.py count-tokens -
+# Lint with JSON Schema (if jsonschema installed) and parse check
+F:/repos/QuYAML/quyaml/Scripts/python.exe scripts/quyaml_cli.py lint examples/bell.quyaml
 
-# Count tokens including JSON and QASM3 representations
+# Format to canonical key order and style (in-place)
+F:/repos/QuYAML/quyaml/Scripts/python.exe scripts/quyaml_cli.py format examples/bell.quyaml -w
+
+# Convert QuYAML -> QASM3
+F:/repos/QuYAML/quyaml/Scripts/python.exe scripts/quyaml_cli.py convert examples/bell.quyaml --to qasm3 -o -
+
+# Convert QASM3 -> QuYAML
+Get-Content examples/bell.qasm | F:/repos/QuYAML/quyaml/Scripts/python.exe scripts/quyaml_cli.py convert --from qasm3 - > bell.quyaml
+
+# Structural diff (human)
+F:/repos/QuYAML/quyaml/Scripts/python.exe scripts/quyaml_cli.py diff a.quyaml b.quyaml
+
+# Structural diff (JSON)
+F:/repos/QuYAML/quyaml/Scripts/python.exe scripts/quyaml_cli.py diff a.quyaml b.quyaml --json
+
+# Compile to compact JSON (for benchmarking/token counting)
+F:/repos/QuYAML/quyaml/Scripts/python.exe scripts/quyaml_cli.py compile examples/bell.quyaml -o -
+
+# Count tokens across QuYAML/JSON/QASM3 (requires tiktoken)
 F:/repos/QuYAML/quyaml/Scripts/python.exe scripts/quyaml_cli.py count-tokens examples/bell.quyaml --json --qasm3
 
 # Measure average parse time (ms) over N iterations
 F:/repos/QuYAML/quyaml/Scripts/python.exe scripts/quyaml_cli.py time-parse examples/bell.quyaml -n 200
 ```
 
-## QuYAML v0.3 (experimental)
+## CI and performance gates
 
-The v0.3 draft extends the language with two new capabilities. These are implemented in the parser and guarded by simple syntax rules; they are considered experimental and may evolve.
-
-- Mid-circuit measurement into a target classical bit
-- Minimal classical control via if-then-else on a single classical bit
+We ship a CI-friendly benchmark harness `scripts/bench_ci.py` to keep parse-time regressions and token budgets under control.
 
 Examples:
 
-```yaml
-version: 0.3
-qubits: q[2]
-bits: c[2]
-ops:
-  - h 0
-  - {measure: {q: 0, c: 0}}   # measure q0 into c0 (mid-circuit)
-  - if:
-      cond: "c[0] == 1"       # single-bit condition (see note below)
-      then:
-        - x 1
-      else:
-        - h 1
+```powershell
+# Parse-time gates for small, static samples
+F:/repos/QuYAML/quyaml/Scripts/python.exe scripts/bench_ci.py --iters 300 --max-ms 100 benchmarks/samples/ghz.quyaml benchmarks/samples/qft3.quyaml benchmarks/samples/control_flow.quyaml
+
+# Parse-time gates for dynamic circuits (looser threshold)
+F:/repos/QuYAML/quyaml/Scripts/python.exe scripts/bench_ci.py --iters 300 --max-ms 200 benchmarks/samples/teleportation.quyaml benchmarks/samples/ipea.quyaml benchmarks/samples/rus.quyaml
+
+# Token-count gates for static samples (500 tokens)
+F:/repos/QuYAML/quyaml/Scripts/python.exe scripts/bench_ci.py --max-tokens 500 benchmarks/samples/ghz.quyaml benchmarks/samples/qft3.quyaml benchmarks/samples/control_flow.quyaml
+
+# Token-count gates for dynamic circuits (higher threshold e.g. 1000)
+F:/repos/QuYAML/quyaml/Scripts/python.exe scripts/bench_ci.py --max-tokens 1000 benchmarks/samples/teleportation.quyaml benchmarks/samples/ipea.quyaml benchmarks/samples/rus.quyaml
 ```
 
-Notes and current limitations:
+Our GitHub Actions workflow `.github/workflows/ci.yml` runs a matrix across Windows and Ubuntu with Python 3.11/3.12, executes unit tests, and enforces the gates above. Adjust thresholds per your project needs.
 
-- cond supports only the form: c[i] == 0 or c[i] == 1.
-- The implementation uses Qiskit dynamic-circuit blocks under the hood (`qc.if_test`).
-- Else is optional; if omitted, only the then-branch is created.
-- Mid-circuit measurement requires that you declare a classical register (`bits: c[n]`).
+## YAML safety and restrictions (enforced)
 
-These features are covered by unit tests in `tests/test_v0_3_features.py`.
+To keep parsing safe and predictable for both humans and LLMs, the parser enforces a restricted YAML subset and resource guardrails:
+
+- Not allowed: YAML anchors (&name), aliases (*name), custom tags (!tag), and merge keys (<<:)
+- Size limits: sane ceilings on input length and nesting depth
+- Safe loader: prefers CSafeLoader when available, otherwise safe_load
+
+Violations fail parsing with a clear error. See the JSON Schema in `docs/schema/quyaml.schema.json` for structural validation.
 
 ### YAML safety and restrictions
 
@@ -370,7 +440,7 @@ If any of these are present, parsing will fail with a clear error. We also use `
 
 Editor tip: VS Code users get schema validation and completion by opening this repo; it includes `.vscode/settings.json` mapping the QuYAML schema (`docs/schema/quyaml.schema.json`) to `*.quyaml` files.
 
-## QuYAML v0.2 Language Reference
+## QuYAML language reference (selected)
 
 ### Field Names (Aliases Supported)
 
@@ -419,7 +489,7 @@ metadata:                    # Circuit metadata (optional, ignored by parser)
 | Barrier | `barrier` | `barrier` | Prevent optimization across barrier |
 | Measure | `measure` | `measure` | Measure all qubits |
 
-### Parameter Substitution
+### Parameter substitution
 
 Use `$variable` to reference parameters, and expressions are evaluated with NumPy:
 
@@ -431,9 +501,13 @@ ops:
   - cphase(2*(pi-$theta)) 0 1
 ```
 
-**Supported constants**: `pi`, `e` (from NumPy)  
-**Supported operators**: `+`, `-`, `*`, `/`, `**` (exponentiation)  
-**Supported functions**: All NumPy functions (e.g., `sin`, `cos`, `sqrt`)
+Supported constants: `pi`, `e`
+
+Operators: `+`, `-`, `*`, `/`, `**`, `%`
+
+Functions: a minimal safe subset sufficient for common arithmetic; expression evaluation is sandboxed.
+
+For full details, browse the parser source in `quyaml_parser.py`.
 
 ## Contributing
 
@@ -451,6 +525,10 @@ Contributions are welcome! Please:
 
 This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
 
+## Migration
+
+Coming from v0.2 or v0.3? See the migration guide: [docs/MIGRATION_0.3_to_0.4.md](docs/MIGRATION_0.3_to_0.4.md)
+
 ## Citation
 
 If you use QuYAML in your research, please cite:
@@ -461,7 +539,7 @@ If you use QuYAML in your research, please cite:
   title = {QuYAML: A Token-Efficient Standard for Quantum Circuits},
   year = {2025},
   url = {https://github.com/Ahmed-Samir11/QuYAML},
-  version = {0.2.0}
+  version = {0.4.0}
 }
 ```
 

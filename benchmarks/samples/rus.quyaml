@@ -1,0 +1,11 @@
+version: 0.4
+circuit: rus_stub
+qubits: q[1]
+bits: c[1]
+ops:
+  - while:
+      cond: "c == 0b0"
+      max_iter: 5
+      body:
+        - h 0
+        - {measure: {q: 0, c: 0}}

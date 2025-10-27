@@ -1,36 +1,136 @@
 {
-  "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://ahmed-samir11.github.io/QuYAML/quyaml.schema.json",
-  "title": "QuYAML v0.2/v0.3 (draft)",
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://quyaml.org/schema/quyaml.schema.json",
+  "title": "QuYAML v0.4 Schema",
+  "description": "JSON Schema for QuYAML v0.4 files (supports optimized/original keys and structured ops).",
   "type": "object",
-  "additionalProperties": true,
+  "required": ["version", "qubits", "ops"],
   "properties": {
     "version": {
       "type": ["string", "number"],
-      "enum": ["0.2", "0.3", 0.2, 0.3],
-      "description": "QuYAML spec version (optional in v0.2, recommended for v0.3)"
+      "enum": ["0.4", 0.4],
+      "description": "QuYAML specification version; v0.4 required by default."
     },
     "circuit": { "type": "string" },
-    "qreg": { "type": "string", "pattern": "^q\\\\[\\\\d+\\\\]$" },
-    "creg": { "type": "string", "pattern": "^c\\\\[\\\\d+\\\\]$" },
-    "qubits": { "type": "string", "pattern": "^q\\\\[\\\\d+\\\\]$" },
-    "bits": { "type": "string", "pattern": "^c\\\\[\\\\d+\\\\]$" },
-    "params": { "type": "object", "additionalProperties": { "type": ["number", "string"] } },
-    "parameters": { "type": "object", "additionalProperties": { "type": ["number", "string"] } },
+    "metadata": { "type": "object", "additionalProperties": true },
+    "qubits": {
+      "type": "string",
+      "pattern": "^q\\[(?:0|[1-9]\\d*)]$",
+      "description": "Quantum register in form q[n]."
+    },
+    "bits": {
+      "type": "string",
+      "pattern": "^c\\[(?:0|[1-9]\\d*)]$",
+      "description": "Classical register in form c[n]."
+    },
+    "qreg": { "$ref": "#/properties/qubits" },
+    "creg": { "$ref": "#/properties/bits" },
+    "params": {
+      "type": "object",
+      "additionalProperties": { "type": ["number", "string"] }
+    },
+    "parameters": { "$ref": "#/properties/params" },
     "ops": {
       "type": "array",
-      "items": { "type": ["string", "object"] },
-      "description": "Optimized instruction list (strings) or future object forms"
+      "items": { "$ref": "#/definitions/op" }
     },
-    "instructions": {
-      "type": "array",
-      "items": { "type": ["string", "object"] }
-    }
+    "instructions": { "$ref": "#/properties/ops" }
   },
-  "oneOf": [
-    { "required": ["qreg", "instructions"] },
-    { "required": ["qubits", "ops"] },
-    { "required": ["qubits", "instructions"] },
-    { "required": ["qreg", "ops"] }
-  ]
+  "additionalProperties": false,
+  "definitions": {
+    "op": {
+      "description": "Either a compact string op (e.g., 'h 0', 'rx(1.57) 0', 'cx 0 1') or a structured object. Structured ops include measure/reset/if/while/for.",
+      "anyOf": [
+        { "type": "string" },
+        { "$ref": "#/definitions/op_struct" }
+      ]
+    },
+    "op_struct": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "measure": { "$ref": "#/definitions/measure" },
+        "reset": { "$ref": "#/definitions/reset" },
+        "if": { "$ref": "#/definitions/if_block" },
+        "while": { "$ref": "#/definitions/while_block" },
+        "for": { "$ref": "#/definitions/for_block" }
+      },
+      "oneOf": [
+        { "required": ["measure"] },
+        { "required": ["reset"] },
+        { "required": ["if"] },
+        { "required": ["while"] },
+        { "required": ["for"] }
+      ]
+    },
+    "measure": {
+      "type": "object",
+      "required": ["q", "c"],
+      "additionalProperties": false,
+      "properties": {
+        "q": { "type": "integer", "minimum": 0 },
+        "c": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "reset": {
+      "type": "object",
+      "required": ["q"],
+      "additionalProperties": false,
+      "properties": {
+        "q": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "if_block": {
+      "type": "object",
+      "required": ["cond", "then"],
+      "additionalProperties": false,
+      "properties": {
+        "cond": { "type": "string", "description": "Condition over c or c[i]; supports ==, &&, ||." },
+        "then": {
+          "type": "array",
+          "items": { "$ref": "#/definitions/op" }
+        },
+        "else": {
+          "type": ["array", "null"],
+          "items": { "$ref": "#/definitions/op" }
+        },
+        "elif": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["cond", "then"],
+            "additionalProperties": false,
+            "properties": {
+              "cond": { "type": "string" },
+              "then": { "type": "array", "items": { "$ref": "#/definitions/op" } }
+            }
+          }
+        }
+      }
+    },
+    "while_block": {
+      "type": "object",
+      "required": ["cond", "body"],
+      "additionalProperties": false,
+      "properties": {
+        "cond": { "type": "string" },
+        "body": { "type": "array", "items": { "$ref": "#/definitions/op" } },
+        "max_iter": { "type": "integer", "minimum": 1, "default": 1024 }
+      }
+    },
+    "for_block": {
+      "type": "object",
+      "required": ["range", "body"],
+      "additionalProperties": false,
+      "properties": {
+        "range": {
+          "type": "array",
+          "minItems": 2,
+          "maxItems": 2,
+          "items": [ { "type": "integer" }, { "type": "integer" } ]
+        },
+        "body": { "type": "array", "items": { "$ref": "#/definitions/op" } }
+      }
+    }
+  }
 }

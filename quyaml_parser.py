@@ -15,6 +15,17 @@ class QuYamlError(Exception):
     """Custom exception for QuYAML parsing errors."""
     pass
 
+# Parser configuration for v0.4
+# Default posture during transition: accept legacy (0.2/0.3) and missing version
+# to keep existing content and tests working. Projects can call the setter below
+# to disable legacy support and require explicit version: 0.4.
+ALLOW_LEGACY_VERSIONS = True
+
+def set_allow_legacy_versions(flag: bool) -> None:
+    """Enable accepting legacy QuYAML versions (0.2/0.3) for migration."""
+    global ALLOW_LEGACY_VERSIONS
+    ALLOW_LEGACY_VERSIONS = bool(flag)
+
 
 def _safe_eval_expression(expr: str, params: Dict[str, Any]) -> float:
     """Safely evaluate a small arithmetic expression used in parameterized gates.
@@ -31,8 +42,9 @@ def _safe_eval_expression(expr: str, params: Dict[str, Any]) -> float:
     for param_name, param_value in params.items():
         eval_expr = eval_expr.replace(f"${param_name}", str(param_value))
 
-    # 2) If asteval is available, prefer it with a restricted symtable
-    if _AEInterpreter is not None:
+    # 2) Strict mode (v0.4): prefer the minimal AST evaluator. If you wish to
+    #    enable extended math via asteval, toggle this path explicitly.
+    if False and _AEInterpreter is not None:
         sym = {
             # constants
             "pi": float(np.pi),
@@ -113,6 +125,20 @@ def _safe_eval_expression(expr: str, params: Dict[str, Any]) -> float:
     except Exception as e:  # pragma: no cover
         raise QuYamlError(f"Could not evaluate parameter expression '{expr}': {e}")
 
+def _enforce_limits(quyaml_string: str, max_bytes: int = 1_000_000, max_nesting: int = 50) -> None:
+    """Guardrails: limit file size and approximate nesting depth."""
+    if len(quyaml_string.encode('utf-8')) > max_bytes:
+        raise QuYamlError("QuYAML document too large.")
+    depth = 0
+    for line in quyaml_string.splitlines():
+        if not line.strip():
+            continue
+        leading = len(line) - len(line.lstrip(' '))
+        level = leading // 2
+        depth = max(depth, level)
+        if depth > max_nesting:
+            raise QuYamlError("QuYAML nesting too deep.")
+
 def _reject_yaml_advanced(quyaml_string: str) -> None:
     """Reject dangerous/advanced YAML features: anchors (&), aliases (*), and custom tags (!).
 
@@ -131,6 +157,164 @@ def _reject_yaml_advanced(quyaml_string: str) -> None:
             raise QuYamlError("YAML aliases (*name) are not allowed in QuYAML for safety.")
         if re.search(r"(^|\s)!\S+", line):
             raise QuYamlError("YAML custom tags (!tag) are not allowed in QuYAML for safety.")
+        if re.search(r"(^|\s)<<\s*:\s*", line):
+            raise QuYamlError("YAML merge keys (<<:) are not allowed in QuYAML for safety.")
+
+def _parse_condition_string(cond_str: str, qc: QuantumCircuit):
+    """Parse condition string into boolean AST supporting atoms and &&/||.
+    Atoms: c[i] == 0|1, c == <int>. No parentheses support.
+    Returns nested tuples: ('atom', ('reg', value)) or ('and'|'or', left, right).
+    """
+    s = cond_str.strip()
+    if not s:
+        raise QuYamlError("Empty condition string.")
+
+    def parse_atom(token: str):
+        m_bit = re.fullmatch(r"c\[(\d+)\]\s*==\s*([01])", token.strip())
+        if m_bit:
+            bit_idx = int(m_bit.group(1))
+            bit_val = int(m_bit.group(2))
+            if bit_idx >= qc.num_clbits:
+                raise QuYamlError(f"Condition references c[{bit_idx}] but circuit has {qc.num_clbits} bits.")
+            then_val = (1 << bit_idx) if bit_val == 1 else 0
+            return ("atom", ("reg", then_val))
+        m_reg = re.fullmatch(r"c\s*==\s*(0b[01_]+|0x[0-9a-fA-F_]+|\d+)", token.strip())
+        if m_reg:
+            lit = m_reg.group(1).replace('_', '')
+            try:
+                then_val = int(lit, 0)
+            except Exception:
+                raise QuYamlError("Invalid integer literal in condition.")
+            max_val = (1 << qc.num_clbits)
+            if then_val < 0 or then_val >= max_val:
+                raise QuYamlError(f"Condition value {then_val} doesn't fit in {qc.num_clbits} classical bits.")
+            return ("atom", ("reg", then_val))
+        raise QuYamlError("Unsupported condition atom. Use 'c[i] == 0/1' or 'c == <int>'.")
+
+    # Split by || then &&; left-associative
+    or_parts = [p for p in re.split(r"\|\|", s) if p.strip()]
+    def parse_and(expr: str):
+        and_parts = [p for p in re.split(r"&&", expr) if p.strip()]
+        node = parse_atom(and_parts[0])
+        for part in and_parts[1:]:
+            node = ("and", node, parse_atom(part))
+        return node
+    node = parse_and(or_parts[0])
+    for part in or_parts[1:]:
+        node = ("or", node, parse_and(part))
+    return node
+
+def _emit_conditional(qc: QuantumCircuit, cond_ast, then_ops, else_ops, params, start_line: int):
+    """Lower boolean AST to nested if/else using equality on full register.
+    This supports atoms and limited &&/|| composition via nesting.
+    """
+    creg = qc.cregs[0] if qc.cregs else None
+    if creg is None:
+        raise QuYamlError("Conditional requires classical bits; define 'bits: c[n]'.")
+
+    def apply_ops(op_list):
+        for sub in op_list:
+            if isinstance(sub, str):
+                _apply_instruction(qc, sub, params, line_num=start_line)
+            elif isinstance(sub, dict):
+                if 'measure' in sub:
+                    spec = sub['measure']
+                    qc.measure(int(spec['q']), int(spec['c']))
+                elif 'reset' in sub:
+                    qc.reset(int(sub['reset']['q']))
+                else:
+                    raise QuYamlError("Nested structured op not supported here (only measure/reset).")
+            else:
+                raise QuYamlError("Invalid op in conditional body.")
+
+    kind = cond_ast[0]
+    if kind == 'atom':
+        _, (rk, val) = cond_ast
+        if rk != 'reg':
+            raise QuYamlError("Unsupported condition kind.")
+        if else_ops:
+            if hasattr(qc, 'if_test') and hasattr(qc, 'else_'):
+                with qc.if_test((creg, val)):
+                    apply_ops(then_ops)
+                with qc.else_():
+                    apply_ops(else_ops)
+            else:
+                from qiskit import QuantumCircuit as _QC
+                t_body = _QC(qc.num_qubits, qc.num_clbits)
+                f_body = _QC(qc.num_qubits, qc.num_clbits)
+                _orig = qc
+                qc = t_body; apply_ops(then_ops)
+                qc = f_body; apply_ops(else_ops)
+                qc = _orig
+                qc.if_else((creg, val), t_body, f_body, qc.qubits, qc.clbits)
+        else:
+            if hasattr(qc, 'if_test'):
+                with qc.if_test((creg, val)):
+                    apply_ops(then_ops)
+            else:
+                from qiskit import QuantumCircuit as _QC
+                t_body = _QC(qc.num_qubits, qc.num_clbits)
+                _orig = qc
+                qc = t_body; apply_ops(then_ops)
+                qc = _orig
+                qc.if_else((creg, val), t_body, None, qc.qubits, qc.clbits)
+    elif kind == 'and':
+        _, left, right = cond_ast
+        # if left then (right ? then_ops : else_ops) else else_ops
+        def first_atom(n):
+            return first_atom(n[1]) if n[0] in ('and','or') else n
+        leaf = first_atom(left)
+        _, (rk, val) = leaf
+        if hasattr(qc, 'if_test') and hasattr(qc, 'else_'):
+            with qc.if_test((creg, val)):
+                _emit_conditional(qc, right, then_ops, else_ops, params, start_line)
+            if else_ops:
+                with qc.else_():
+                    apply_ops(else_ops)
+        elif hasattr(qc, 'if_test'):
+            # Fallback without else_ using manual bodies
+            from qiskit import QuantumCircuit as _QC
+            t_body = _QC(qc.num_qubits, qc.num_clbits)
+            f_body = _QC(qc.num_qubits, qc.num_clbits)
+            _orig = qc
+            qc = t_body; _emit_conditional(qc, right, then_ops, else_ops, params, start_line)
+            qc = f_body; apply_ops(else_ops)
+            qc = _orig
+            qc.if_else((creg, val), t_body, f_body, qc.qubits, qc.clbits)
+        else:
+            # No builders: lower to if_else with constructed bodies
+            from qiskit import QuantumCircuit as _QC
+            t_body = _QC(qc.num_qubits, qc.num_clbits)
+            f_body = _QC(qc.num_qubits, qc.num_clbits)
+            _orig = qc
+            qc = t_body; _emit_conditional(qc, right, then_ops, else_ops, params, start_line)
+            qc = f_body; apply_ops(else_ops)
+            qc = _orig
+            qc.if_else((creg, val), t_body, f_body, qc.qubits, qc.clbits)
+    elif kind == 'or':
+        _, left, right = cond_ast
+        # if left then then_ops else (if right then then_ops else else_ops)
+        def first_atom(n):
+            return first_atom(n[1]) if n[0] in ('and','or') else n
+        leaf = first_atom(left)
+        _, (rk, val) = leaf
+        if hasattr(qc, 'if_test') and hasattr(qc, 'else_'):
+            with qc.if_test((creg, val)):
+                apply_ops(then_ops)
+            with qc.else_():
+                _emit_conditional(qc, right, then_ops, else_ops, params, start_line)
+        else:
+            # Build bodies manually and use if_else
+            from qiskit import QuantumCircuit as _QC
+            t_body = _QC(qc.num_qubits, qc.num_clbits)
+            f_body = _QC(qc.num_qubits, qc.num_clbits)
+            _orig = qc
+            qc = t_body; apply_ops(then_ops)
+            qc = f_body; _emit_conditional(qc, right, then_ops, else_ops, params, start_line)
+            qc = _orig
+            qc.if_else((creg, val), t_body, f_body, qc.qubits, qc.clbits)
+    else:
+        raise QuYamlError("Unsupported condition tree.")
 
 def _apply_instruction(qc: QuantumCircuit, inst_str: str, params: dict, line_num: int, cond=None):
     """Parses and applies a single QuYAML instruction string.
@@ -236,6 +420,8 @@ def _apply_instruction(qc: QuantumCircuit, inst_str: str, params: dict, line_num
                 ret = qc.h(q_indices[0])
             elif gate_name == 'x':
                 ret = qc.x(q_indices[0])
+            elif gate_name == 'z':
+                ret = qc.z(q_indices[0])
             elif gate_name == 'cx':
                 ret = qc.cx(q_indices[0], q_indices[1])
             elif gate_name == 'swap':
@@ -244,6 +430,8 @@ def _apply_instruction(qc: QuantumCircuit, inst_str: str, params: dict, line_num
                 qc.barrier()
             elif gate_name == 'measure':
                 qc.measure_all()
+            elif gate_name == 'reset':
+                ret = qc.reset(q_indices[0])
             else:
                 raise QuYamlError(f"Unknown gate '{gate_name}' on line {line_num}.")
             if cond is not None and ret is not None:
@@ -270,17 +458,31 @@ def parse_quyaml_to_qiskit(quyaml_string: str) -> QuantumCircuit:
     - Optimized: qubits, bits, params, ops
     """
     try:
+        _enforce_limits(quyaml_string)
         _reject_yaml_advanced(quyaml_string)
-        data = yaml.safe_load(quyaml_string)
+        try:
+            data = yaml.load(quyaml_string, Loader=yaml.CSafeLoader)  # type: ignore[attr-defined]
+        except Exception:
+            data = yaml.safe_load(quyaml_string)
         if not isinstance(data, dict):
             raise QuYamlError("Top level of QuYAML must be a dictionary.")
     except yaml.YAMLError as e:
         raise QuYamlError(f"Invalid YAML syntax: {e}")
 
-    # Version gate (optional for now; accept 0.2/0.3, reject others)
+    # Version gate (v0.4 preferred; legacy allowed via config).
+    # If version is missing and legacy is allowed, treat as legacy 0.3.
     version = data.get('version')
-    if version is not None and str(version) not in {'0.2', '0.3'}:
-        raise QuYamlError(f"Unsupported QuYAML version '{version}'. Supported versions: 0.2, 0.3.")
+    if version is None:
+        if ALLOW_LEGACY_VERSIONS:
+            v = '0.3'
+        else:
+            raise QuYamlError("Missing required 'version' field (expected '0.4').")
+    else:
+        v = str(version)
+    if v != '0.4':
+        if not (ALLOW_LEGACY_VERSIONS and v in {'0.2', '0.3'}):
+            extra = ", 0.2, 0.3 (legacy)" if ALLOW_LEGACY_VERSIONS else ""
+            raise QuYamlError(f"Unsupported QuYAML version '{version}'. Supported: 0.4{extra}.")
 
     circuit_name = data.get('circuit', 'my_circuit')
     
@@ -427,7 +629,100 @@ def parse_quyaml_to_qiskit(quyaml_string: str) -> QuantumCircuit:
                 block = inst['if']
                 if not isinstance(block, dict):
                     raise QuYamlError(f"Invalid 'if' block on line {i+1}.")
-                _parse_if_block(block, start_line=i+1)
+                cond_str = str(block.get('cond', ''))
+                if '&&' in cond_str or '||' in cond_str:
+                    # Extended boolean conditions
+                    cond_ast = _parse_condition_string(cond_str, qc)
+                    then_ops = block.get('then', [])
+                    else_ops = block.get('else', []) or []
+                    _emit_conditional(qc, cond_ast, then_ops, else_ops, params, start_line=i+1)
+                else:
+                    _parse_if_block(block, start_line=i+1)
+            elif 'reset' in inst:
+                spec = inst['reset']
+                if not isinstance(spec, dict) or 'q' not in spec:
+                    raise QuYamlError(f"Invalid 'reset' spec on line {i+1}. Expected {{q: int}}.")
+                q_i = int(spec['q'])
+                if q_i >= qc.num_qubits:
+                    raise QuYamlError(f"Reset index out of bounds on line {i+1}.")
+                try:
+                    qc.reset(q_i)
+                except Exception as e:
+                    raise QuYamlError(f"Failed to apply reset on line {i+1}: {e}")
+            elif 'while' in inst:
+                wb = inst['while']
+                if not isinstance(wb, dict):
+                    raise QuYamlError(f"Invalid 'while' block on line {i+1}.")
+                cond_ast = _parse_condition_string(str(wb.get('cond','')), qc)
+                body = wb.get('body', [])
+                max_iter = int(wb.get('max_iter', 1024))
+                if hasattr(qc, 'while_loop') and cond_ast[0] == 'atom':
+                    _, (rk, val) = cond_ast
+                    try:
+                        # Prefer context-manager form for broad compatibility
+                        with qc.while_loop((qc.cregs[0], val)):
+                            for sub in body:
+                                if isinstance(sub, str):
+                                    _apply_instruction(qc, sub, params, line_num=i+1)
+                                elif isinstance(sub, dict):
+                                    if 'measure' in sub:
+                                        spec = sub['measure']
+                                        qc.measure(int(spec['q']), int(spec['c']))
+                                    elif 'reset' in sub:
+                                        qc.reset(int(sub['reset']['q']))
+                                    else:
+                                        raise QuYamlError("Unsupported structured op in while body.")
+                                else:
+                                    raise QuYamlError("Invalid op in while body.")
+                    except Exception as e:
+                        raise QuYamlError(f"Failed to build while_loop: {e}")
+                else:
+                    for _ in range(max_iter):
+                        _emit_conditional(qc, cond_ast, body, [], params, start_line=i+1)
+            elif 'for' in inst:
+                fb = inst['for']
+                if not isinstance(fb, dict):
+                    raise QuYamlError(f"Invalid 'for' block on line {i+1}.")
+                r = fb.get('range')
+                if not (isinstance(r, list) and len(r) == 2):
+                    raise QuYamlError("'for' requires range: [start, end]")
+                start, end = int(r[0]), int(r[1])
+                body = fb.get('body', [])
+                count = max(0, end - start)
+                if hasattr(qc, 'for_loop'):
+                    try:
+                        # Use context-manager form; index variable unused for now
+                        with qc.for_loop(range(start, end)):
+                            for sub in body:
+                                if isinstance(sub, str):
+                                    _apply_instruction(qc, sub, params, line_num=i+1)
+                                elif isinstance(sub, dict):
+                                    if 'measure' in sub:
+                                        spec = sub['measure']
+                                        qc.measure(int(spec['q']), int(spec['c']))
+                                    elif 'reset' in sub:
+                                        qc.reset(int(sub['reset']['q']))
+                                    else:
+                                        raise QuYamlError("Unsupported structured op in for body.")
+                                else:
+                                    raise QuYamlError("Invalid op in for body.")
+                    except Exception as e:
+                        raise QuYamlError(f"Failed to build for_loop: {e}")
+                else:
+                    for _ in range(count):
+                        for sub in body:
+                            if isinstance(sub, str):
+                                _apply_instruction(qc, sub, params, line_num=i+1)
+                            elif isinstance(sub, dict):
+                                if 'measure' in sub:
+                                    spec = sub['measure']
+                                    qc.measure(int(spec['q']), int(spec['c']))
+                                elif 'reset' in sub:
+                                    qc.reset(int(sub['reset']['q']))
+                                else:
+                                    raise QuYamlError("Unsupported structured op in for body.")
+                            else:
+                                raise QuYamlError("Invalid op in for body.")
             else:
                 raise QuYamlError(f"Unknown structured op on line {i+1}. Supported: 'measure', 'if'.")
         else:

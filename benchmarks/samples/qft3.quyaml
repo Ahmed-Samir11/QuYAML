@@ -1,0 +1,10 @@
+version: 0.4
+circuit: qft3
+qubits: q[3]
+ops:
+  - h 0
+  - cphase(pi/2) 1 0
+  - h 1
+  - cphase(pi/4) 2 0
+  - cphase(pi/2) 2 1
+  - h 2

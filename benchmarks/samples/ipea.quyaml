@@ -1,0 +1,12 @@
+version: 0.4
+circuit: ipea_stub
+qubits: q[3]
+bits: c[1]
+ops:
+  - {measure: {q: 2, c: 0}}
+  - for:
+      range: [0, 3]
+      body:
+        - h 0
+        - cx 0 1
+        - h 0

@@ -1,4 +1,4 @@
-name: Python CI
+name: CI
 
 on:
   push:
@@ -7,26 +7,34 @@ on:
     branches: [ main ]
 
 jobs:
-  build:
-    runs-on: ubuntu-latest
+  test-bench:
     strategy:
       matrix:
-        python-version: ["3.10", "3.11"]
-
+        os: [ubuntu-latest, windows-latest]
+        python-version: ["3.11", "3.12"]
+    runs-on: ${{ matrix.os }}
     steps:
-    - uses: actions/checkout@v3
-
-    - name: Set up Python ${{ matrix.python-version }}
-      uses: actions/setup-python@v3
-      with:
-        python-version: ${{ matrix.python-version }}
-
-    - name: Install dependencies
-      run: |
-        python -m pip install --upgrade pip
-        pip install -r requirements.txt
-        pip install qiskit-aer # Needed for unitary simulation in tests
-
-    - name: Run tests with pytest
-      run: |
-        pytest
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install tiktoken
+      - name: Run tests
+        run: |
+          pytest -q
+      - name: Parse-time gates (standard)
+        run: |
+          python scripts/bench_ci.py --iters 300 --max-ms 100 benchmarks/samples/ghz.quyaml benchmarks/samples/qft3.quyaml benchmarks/samples/control_flow.quyaml
+      - name: Parse-time gates (dynamic)
+        run: |
+          python scripts/bench_ci.py --iters 300 --max-ms 200 benchmarks/samples/teleportation.quyaml benchmarks/samples/ipea.quyaml benchmarks/samples/rus.quyaml
+      - name: Token count gates
+        run: |
+          python scripts/bench_ci.py --max-tokens 500 benchmarks/samples/ghz.quyaml benchmarks/samples/qft3.quyaml benchmarks/samples/control_flow.quyaml
+      - name: Token count gates (dynamic)
+        run: |
+          python scripts/bench_ci.py --max-tokens 1000 benchmarks/samples/teleportation.quyaml benchmarks/samples/ipea.quyaml benchmarks/samples/rus.quyaml

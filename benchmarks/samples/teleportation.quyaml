@@ -1,0 +1,17 @@
+version: 0.4
+circuit: teleportation
+qubits: q[3]
+bits: c[2]
+ops:
+  - h 1
+  - cx 1 2
+  - cx 0 1
+  - h 0
+  - {measure: {q: 0, c: 0}}
+  - {measure: {q: 1, c: 1}}
+  - if:
+      cond: "c[1] == 1"
+      then: [x 2]
+  - if:
+      cond: "c[0] == 1"
+      then: [z 2]

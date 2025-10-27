@@ -1,0 +1,7 @@
+version: 0.4
+circuit: ghz3
+qubits: q[3]
+ops:
+  - h 0
+  - cx 0 1
+  - cx 1 2
