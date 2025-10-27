@@ -56,8 +56,10 @@ def _safe_eval_expression(expr: str, params: Dict[str, Any]) -> float:
             raise QuYamlError(f"Parameter expression '{expr}' did not evaluate to a number: {e}")
 
     # 3) Fallback: very small AST-based evaluator (no function calls)
+    # Accept only modern AST nodes (ast.Constant for literals). Avoid ast.Num to prevent
+    # deprecation warnings on Python 3.12+ and ensure forward compatibility with 3.14.
     allowed_nodes = (
-        ast.Expression, ast.BinOp, ast.UnaryOp, ast.Num, ast.Constant,
+        ast.Expression, ast.BinOp, ast.UnaryOp, ast.Constant,
         ast.Add, ast.Sub, ast.Mult, ast.Div, ast.Pow, ast.USub, ast.UAdd,
         ast.Load, ast.Name, ast.Mod,
     )
@@ -67,9 +69,7 @@ def _safe_eval_expression(expr: str, params: Dict[str, Any]) -> float:
             raise QuYamlError(f"Unsupported expression element in '{expr}' ({type(node).__name__}).")
         if isinstance(node, ast.Expression):
             return _eval(node.body)
-        if isinstance(node, ast.Num):  # Py<3.8
-            return float(node.n)
-        if isinstance(node, ast.Constant):  # Py3.8+
+        if isinstance(node, ast.Constant):
             if isinstance(node.value, (int, float)):
                 return float(node.value)
             raise QuYamlError(f"Non-numeric constant in '{expr}'.")
