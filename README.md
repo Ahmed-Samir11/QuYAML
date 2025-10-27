@@ -247,6 +247,10 @@ Using exact GPT-4 tokenization (`tiktoken`) across 8 diverse circuits:
 
 See [`benchmarks/README.md`](benchmarks/README.md) and [`OPTIMIZATION_RESULTS.md`](OPTIMIZATION_RESULTS.md) for detailed analysis.
 
+### Additional Docs
+
+- Expert evaluation and roadmap: [`docs/EVALUATION_v0.2.md`](docs/EVALUATION_v0.2.md)
+
 ### PennyLane-style Benchmarks (QuYAML vs JSON vs OpenQASM 3)
 
 We also evaluated a set of harder, PennyLane-style circuits (QAOA Max-Cut, QFT, Grover, Phase Estimation, random entangling layers, and a shallow quantum-volume-like circuit), using exact GPT-4 tokenization and measuring parse times:
