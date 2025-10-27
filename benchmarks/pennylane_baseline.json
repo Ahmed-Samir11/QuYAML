@@ -1,0 +1,16 @@
+{
+  "avg_tokens": {
+    "QuYAML": 466.6,
+    "JSON": 661.1,
+    "QASM3": 413.3
+  },
+  "avg_parse_ms": {
+    "QuYAML": 5.546,
+    "JSON": 0.051,
+    "QASM3": 25.105
+  },
+  "tolerances": {
+    "tokens_pct": 0.10,
+    "parse_pct": 1.00
+  }
+}
