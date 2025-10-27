@@ -245,6 +245,56 @@ Using exact GPT-4 tokenization (`tiktoken`) across 8 diverse circuits:
 
 See [`benchmarks/README.md`](benchmarks/README.md) and [`OPTIMIZATION_RESULTS.md`](OPTIMIZATION_RESULTS.md) for detailed analysis.
 
+### PennyLane-style Benchmarks (QuYAML vs JSON vs OpenQASM 3)
+
+We also evaluated a set of harder, PennyLane-style circuits (QAOA Max-Cut, QFT, Grover, Phase Estimation, random entangling layers, and a shallow quantum-volume-like circuit), using exact GPT-4 tokenization and measuring parse times:
+
+- Tokens are counted for the QuYAML source, a compact Qiskit JSON representation, and OpenQASM 3 generated from the same circuit.
+- Parse times measure: QuYAML parse (QuYAML → Qiskit), JSON decode only, and QASM3 parse via Qiskit’s `qasm3.loads`.
+
+Average across all tests:
+
+- Tokens: QuYAML 466.6, JSON 661.1, QASM3 413.3
+- QuYAML vs JSON: +29.4% fewer tokens than JSON
+- QuYAML vs QASM3: −12.9% more tokens than QASM3 (QASM3 wins on average)
+- Parse times (ms): QuYAML 5.546, JSON 0.051, QASM3 25.105
+
+Per-circuit token counts and deltas:
+
+| Circuit | QuYAML | JSON | QASM3 | QuYAML vs JSON | QuYAML vs QASM3 |
+|---|---:|---:|---:|---:|---:|
+| QAOA Max-Cut p=3 (ring-6) | 678 | 715 | 484 | +5.2% | -40.1% |
+| QFT (5 qubits) | 191 | 346 | 195 | +44.8% | +2.1% |
+| Grover (4q, oracle=1111) | 268 | 527 | 236 | +49.1% | -13.6% |
+| Phase Estimation (3+1) | 122 | 225 | 126 | +45.8% | +3.2% |
+| QAOA Max-Cut p=5 (ring-6) | 948 | 1123 | 772 | +15.6% | -22.8% |
+| Random entangling (n=6, d=4) | 738 | 1152 | 718 | +35.9% | -2.8% |
+| Quantum-volume-like (n=6, layers=2) | 321 | 540 | 362 | +40.6% | +11.3% |
+
+Per-circuit parse times (milliseconds):
+
+| Circuit | QuYAML parse | JSON decode | QASM3 parse |
+|---|---:|---:|---:|
+| QAOA Max-Cut p=3 (ring-6) | 7.409 | 0.068 | 30.593 |
+| QFT (5 qubits) | 3.061 | 0.040 | 13.344 |
+| Grover (4q, oracle=1111) | 3.443 | 0.035 | 20.074 |
+| Phase Estimation (3+1) | 1.737 | 0.018 | 8.313 |
+| QAOA Max-Cut p=5 (ring-6) | 11.093 | 0.076 | 36.120 |
+| Random entangling (n=6, d=4) | 7.730 | 0.083 | 45.472 |
+| Quantum-volume-like (n=6, layers=2) | 4.352 | 0.037 | 21.815 |
+
+Reproduce locally:
+
+```powershell
+# Activate venv (Windows PowerShell)
+& F:/repos/QuYAML/quyaml/Scripts/Activate.ps1
+
+# Run the PennyLane-style benchmark
+F:/repos/QuYAML/quyaml/Scripts/python.exe benchmarks/benchmark_pennylane.py
+```
+
+The latest run output is saved to `benchmarks/_last_pennylane_results.txt`.
+
 ## QuYAML v0.2 Language Reference
 
 ### Field Names (Aliases Supported)

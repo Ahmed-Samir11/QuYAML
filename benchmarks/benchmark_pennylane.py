@@ -28,6 +28,7 @@ if _ROOT not in sys.path:
     sys.path.insert(0, _ROOT)
 
 import tiktoken
+from qiskit import qasm3
 from quyaml_parser import parse_quyaml_to_qiskit
 
 encoder = tiktoken.encoding_for_model("gpt-4")
@@ -67,6 +68,14 @@ def circuit_to_json_from_quyaml(quyaml_str: str) -> str:
                 params.append(str(p))
         data["gates"].append({"name": op.name, "qubits": qidx, "params": params})
     return json.dumps(data, separators=(",", ":"))
+
+
+def circuit_to_qasm3_from_quyaml(quyaml_str: str) -> str:
+    """Generate an OpenQASM 3.0 string for the given QuYAML by first
+    converting to a Qiskit circuit and then dumping to QASM3.
+    """
+    qc = parse_quyaml_to_qiskit(quyaml_str)
+    return qasm3.dumps(qc)
 
 def qaoa_maxcut_ring_quyaml(p: int, n: int = 6) -> str:
     edges = [(i, (i + 1) % n) for i in range(n)]
@@ -304,26 +313,42 @@ for name, data in TESTS.items():
         continue
     qy = qy_val.strip()
     js = circuit_to_json_from_quyaml(qy)
+    q3 = circuit_to_qasm3_from_quyaml(qy)
 
     qy_tokens = count_tokens(qy)
     js_tokens = count_tokens(js)
+    q3_tokens = count_tokens(q3)
 
     qy_ms = measure_time(parse_quyaml_to_qiskit, qy)
     js_ms = measure_time(json.loads, js)
+    q3_ms = measure_time(lambda s: qasm3.loads(s), q3)
 
-    rows.append((name, qy_tokens, js_tokens, qy_ms, js_ms))
+    rows.append((name, qy_tokens, js_tokens, q3_tokens, qy_ms, js_ms, q3_ms))
 
     print("\n--", name)
-    print(f"  Tokens -> QuYAML: {qy_tokens:5d} | JSON: {js_tokens:5d} | delta: {((js_tokens-qy_tokens)/js_tokens*100):+.1f}% vs JSON")
-    print(f"  Parse  -> QuYAML: {qy_ms:6.3f} ms | JSON-decode: {js_ms:6.3f} ms")
+    print(
+        f"  Tokens -> QuYAML: {qy_tokens:5d} | JSON: {js_tokens:5d} | QASM3: {q3_tokens:5d} | "
+        f"QuYAML vs JSON: {((js_tokens-qy_tokens)/js_tokens*100):+.1f}% | QuYAML vs QASM3: {((q3_tokens-qy_tokens)/q3_tokens*100):+.1f}%"
+    )
+    print(f"  Parse  -> QuYAML: {qy_ms:6.3f} ms | JSON-decode: {js_ms:6.3f} ms | QASM3-parse: {q3_ms:6.3f} ms")
 
 avg_qy = sum(r[1] for r in rows) / len(rows)
 avg_js = sum(r[2] for r in rows) / len(rows)
+avg_q3 = sum(r[3] for r in rows) / len(rows)
+avg_qy_ms = sum(r[4] for r in rows) / len(rows)
+avg_js_ms = sum(r[5] for r in rows) / len(rows)
+avg_q3_ms = sum(r[6] for r in rows) / len(rows)
 
 print("\n" + "-" * 80)
 print("AVERAGE TOKENS (across supported tests):")
 print(f"  QuYAML: {avg_qy:.1f}")
 print(f"  JSON  : {avg_js:.1f}")
+print(f"  QASM3 : {avg_q3:.1f}")
 print(f"  QuYAML vs JSON: {(avg_js-avg_qy)/avg_js*100:+.1f}% more efficient than JSON")
+print(f"  QuYAML vs QASM3: {(avg_q3-avg_qy)/avg_q3*100:+.1f}% more efficient than QASM3")
+print("\nAVERAGE PARSE TIMES:")
+print(f"  QuYAML parse   : {avg_qy_ms:.3f} ms")
+print(f"  JSON decode    : {avg_js_ms:.3f} ms")
+print(f"  QASM3 parse    : {avg_q3_ms:.3f} ms")
 if unsupported:
     print(f"\nNote: {unsupported} test(s) omitted due to unsupported mid-circuit control in QuYAML v0.2.")
