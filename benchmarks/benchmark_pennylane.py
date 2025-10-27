@@ -335,6 +335,26 @@ ops:
     "Quantum-volume-like (n=6, layers=2)": {
         "quyaml": shallow_quantum_volume_like_quyaml(n=6, layers=2, seed=11),
     },
+        "Conditional full-register equality (2q)": {
+                "quyaml": """
+# Exercise v0.3: full-register conditional (c == 0b11)
+version: 0.3
+circuit: cond_full_reg
+qubits: q[2]
+bits: c[2]
+ops:
+    - h 0
+    - x 1
+    - {measure: {q: 0, c: 0}}
+    - {measure: {q: 1, c: 1}}
+    - if:
+            cond: "c == 0b11"
+            then:
+                - rx(pi/3) 0
+            else:
+                - ry(pi/5) 1
+""",
+        },
 }
 
 
@@ -352,49 +372,73 @@ for name, data in TESTS.items():
         unsupported += 1
         continue
     qy = qy_val.strip()
-    js = circuit_to_json_from_quyaml(qy)
-    q3 = circuit_to_qasm3_from_quyaml(qy)
+    js = None
+    q3 = None
+    try:
+        js = circuit_to_json_from_quyaml(qy)
+    except Exception:
+        js = None
+    try:
+        q3 = circuit_to_qasm3_from_quyaml(qy)
+    except Exception:
+        q3 = None
 
     qy_tokens = count_tokens(qy)
-    js_tokens = count_tokens(js)
-    q3_tokens = count_tokens(q3)
+    js_tokens = count_tokens(js) if js is not None else None
+    q3_tokens = count_tokens(q3) if q3 is not None else None
 
     qy_ms = measure_time(parse_quyaml_to_qiskit, qy)
-    js_ms = measure_time(json.loads, js)
-    js_rebuild_ms = measure_time(json_to_qiskit, js)
-    q3_ms = measure_time(lambda s: qasm3.loads(s), q3)
+    js_ms = measure_time(json.loads, js) if js is not None else None
+    js_rebuild_ms = measure_time(json_to_qiskit, js) if js is not None else None
+    q3_ms = measure_time(lambda s: qasm3.loads(s), q3) if q3 is not None else None
 
     rows.append((name, qy_tokens, js_tokens, q3_tokens, qy_ms, js_ms, js_rebuild_ms, q3_ms))
 
     print("\n--", name)
+    def fmt(v, width=None, prec=1):
+        if v is None:
+            return "   —" if width is None else "—".rjust(width)
+        if isinstance(v, (int,)):
+            return f"{v:{width}d}" if width else f"{v:d}"
+        return f"{v:{width}.{prec}f}" if width else f"{v:.{prec}f}"
+
+    qy_vs_js = ((js_tokens - qy_tokens) / js_tokens * 100) if js_tokens else None
+    qy_vs_q3 = ((q3_tokens - qy_tokens) / q3_tokens * 100) if q3_tokens else None
     print(
-        f"  Tokens -> QuYAML: {qy_tokens:5d} | JSON: {js_tokens:5d} | QASM3: {q3_tokens:5d} | "
-        f"QuYAML vs JSON: {((js_tokens-qy_tokens)/js_tokens*100):+.1f}% | QuYAML vs QASM3: {((q3_tokens-qy_tokens)/q3_tokens*100):+.1f}%"
+        f"  Tokens -> QuYAML: {fmt(qy_tokens,5)} | JSON: {fmt(js_tokens,5)} | QASM3: {fmt(q3_tokens,5)} | "
+        f"QuYAML vs JSON: {fmt(qy_vs_js,prec=1)}% | QuYAML vs QASM3: {fmt(qy_vs_q3,prec=1)}%"
     )
     print(
-        f"  Parse  -> QuYAML: {qy_ms:6.3f} ms | JSON-decode: {js_ms:6.3f} ms | "
-        f"JSON-rebuild: {js_rebuild_ms:6.3f} ms | QASM3-parse: {q3_ms:6.3f} ms"
+        f"  Parse  -> QuYAML: {fmt(qy_ms,6,3)} ms | JSON-decode: {fmt(js_ms,6,3)} ms | "
+        f"JSON-rebuild: {fmt(js_rebuild_ms,6,3)} ms | QASM3-parse: {fmt(q3_ms,6,3)} ms"
     )
 
-avg_qy = sum(r[1] for r in rows) / len(rows)
-avg_js = sum(r[2] for r in rows) / len(rows)
-avg_q3 = sum(r[3] for r in rows) / len(rows)
-avg_qy_ms = sum(r[4] for r in rows) / len(rows)
-avg_js_ms = sum(r[5] for r in rows) / len(rows)
-avg_js_rebuild_ms = sum(r[6] for r in rows) / len(rows)
-avg_q3_ms = sum(r[7] for r in rows) / len(rows)
+def _avg(idx):
+    vals = [r[idx] for r in rows if r[idx] is not None]
+    return sum(vals) / len(vals) if vals else None
+
+avg_qy = _avg(1)
+avg_js = _avg(2)
+avg_q3 = _avg(3)
+avg_qy_ms = _avg(4)
+avg_js_ms = _avg(5)
+avg_js_rebuild_ms = _avg(6)
+avg_q3_ms = _avg(7)
 
 print("\n" + "-" * 80)
 print("AVERAGE TOKENS (across supported tests):")
-print(f"  QuYAML: {avg_qy:.1f}")
-print(f"  JSON  : {avg_js:.1f}")
-print(f"  QASM3 : {avg_q3:.1f}")
-print(f"  QuYAML vs JSON: {(avg_js-avg_qy)/avg_js*100:+.1f}% more efficient than JSON")
-print(f"  QuYAML vs QASM3: {(avg_q3-avg_qy)/avg_q3*100:+.1f}% more efficient than QASM3")
+if avg_qy is not None: print(f"  QuYAML: {avg_qy:.1f}")
+if avg_js is not None: print(f"  JSON  : {avg_js:.1f}")
+if avg_q3 is not None: print(f"  QASM3 : {avg_q3:.1f}")
+if avg_qy is not None and avg_js is not None:
+    print(f"  QuYAML vs JSON: {(avg_js-avg_qy)/avg_js*100:+.1f}% more efficient than JSON")
+if avg_qy is not None and avg_q3 is not None:
+    print(f"  QuYAML vs QASM3: {(avg_q3-avg_qy)/avg_q3*100:+.1f}% more efficient than QASM3")
+
 print("\nAVERAGE PARSE TIMES:")
-print(f"  QuYAML parse   : {avg_qy_ms:.3f} ms")
-print(f"  JSON decode    : {avg_js_ms:.3f} ms")
-print(f"  JSON rebuild   : {avg_js_rebuild_ms:.3f} ms")
-print(f"  QASM3 parse    : {avg_q3_ms:.3f} ms")
+if avg_qy_ms is not None: print(f"  QuYAML parse   : {avg_qy_ms:.3f} ms")
+if avg_js_ms is not None: print(f"  JSON decode    : {avg_js_ms:.3f} ms")
+if avg_js_rebuild_ms is not None: print(f"  JSON rebuild   : {avg_js_rebuild_ms:.3f} ms")
+if avg_q3_ms is not None: print(f"  QASM3 parse    : {avg_q3_ms:.3f} ms")
 if unsupported:
     print(f"\nNote: {unsupported} test(s) omitted due to unsupported mid-circuit control in QuYAML v0.2.")
