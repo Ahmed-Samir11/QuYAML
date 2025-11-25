@@ -24,6 +24,7 @@ jobs:
           python -m pip install --upgrade pip
           if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
           pip install tiktoken qiskit qiskit_qasm3_import pennylane pennylane-qiskit
+          pip install -e .
 
       - name: Run benchmark and check regressions
         run: |
