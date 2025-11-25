@@ -52,7 +52,7 @@ Using exact GPT-4 tokenization across 8 diverse quantum circuits:
 
 See [`benchmarks/README.md`](benchmarks/README.md) for detailed per-circuit analysis.
 
-## QuYAML v0.4 at a glance
+## QuYAML v1.0 at a glance
 
 QuYAML supports both **original** and **optimized** syntax (fully backward compatible):
 
@@ -98,7 +98,7 @@ ops:
   - rx(2*$beta) 1
 ```
 
-### Control flow (new in v0.4)
+### Control flow
 
 Conditional blocks with composite conditions:
 
@@ -541,7 +541,8 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 ## Migration
 
-Coming from v0.2 or v0.3? See the migration guide: [docs/MIGRATION_0.3_to_0.4.md](docs/MIGRATION_0.3_to_0.4.md)
+Coming from v0.2 or v0.3? See the migration guide: [docs/MIGRATION_0.3_to_0.4.md](docs/MIGRATION_0.3_to_0.4.md).
+For v0.4 to v1.0, no breaking changes were introduced to the circuit syntax, but the execution model now supports native parameterization and auto-saving.
 
 ## Citation
 
@@ -553,7 +554,7 @@ If you use QuYAML in your research, please cite:
   title = {QuYAML: A Token-Efficient Standard for Quantum Circuits},
   year = {2025},
   url = {https://github.com/Ahmed-Samir11/QuYAML},
-  version = {0.4.0}
+  version = {1.0.0}
 }
 ```
 
