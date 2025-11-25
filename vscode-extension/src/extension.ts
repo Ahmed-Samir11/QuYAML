@@ -72,12 +72,19 @@ function validateQuYaml(document: vscode.TextDocument, collection: vscode.Diagno
         numQubits = parseInt(qubitsMatch[1] || qubitsMatch[2]);
     }
 
-    if (numQubits > 0) {
+    // Classical Bit Counter Logic
+    let numBits = 0;
+    const bitsMatch = text.match(/(?:bits|creg):\s*(?:c\[(\d+)\]|(\d+))/);
+    if (bitsMatch) {
+        numBits = parseInt(bitsMatch[1] || bitsMatch[2]);
+    }
+
+    if (numQubits > 0 || numBits > 0) {
         const lines = text.split('\n');
         lines.forEach((line, i) => {
-            // 1. Check structured ops: "q: 5"
+            // 1. Check structured ops: "q: 5" or "c: 5"
             const qMatch = line.match(/q:\s*(\d+)/);
-            if (qMatch) {
+            if (qMatch && numQubits > 0) {
                 const idx = parseInt(qMatch[1]);
                 if (idx >= numQubits) {
                     const startCol = line.indexOf(qMatch[1]);
@@ -90,7 +97,21 @@ function validateQuYaml(document: vscode.TextDocument, collection: vscode.Diagno
                 }
             }
 
-            // 2. Check inline ops: "- cx 0 5"
+            const cMatch = line.match(/c:\s*(\d+)/);
+            if (cMatch && numBits > 0) {
+                const idx = parseInt(cMatch[1]);
+                if (idx >= numBits) {
+                    const startCol = line.indexOf(cMatch[1]);
+                    const range = new vscode.Range(i, startCol, i, startCol + cMatch[1].length);
+                    diagnostics.push(new vscode.Diagnostic(
+                        range, 
+                        `Classical bit index ${idx} out of range (max ${numBits - 1})`, 
+                        vscode.DiagnosticSeverity.Error
+                    ));
+                }
+            }
+
+            // 2. Check inline ops: "- cx 0 5" or "- measure 0 5"
             const trimmed = line.trim();
             if (trimmed.startsWith('-')) {
                 // Remove parameters like (0.5) to avoid false positives
@@ -98,24 +119,43 @@ function validateQuYaml(document: vscode.TextDocument, collection: vscode.Diagno
                 const parts = noParams.split(/\s+/);
                 
                 // Skip the first part (the gate name, e.g., "- cx")
-                // Note: parts[0] is "-", parts[1] is "cx" usually, or parts[0] is "-cx"
                 let startIndex = 1;
                 if (parts[0] === '-') startIndex = 2;
 
-                for (let j = startIndex; j < parts.length; j++) {
-                    // Check if it's a pure integer
-                    if (/^\d+$/.test(parts[j])) {
-                        const idx = parseInt(parts[j]);
-                        if (idx >= numQubits) {
-                            // Find position in original line
-                            // Note: This is naive and might match the wrong occurrence if duplicates exist
-                            const col = line.lastIndexOf(parts[j]); 
-                            const range = new vscode.Range(i, col, i, col + parts[j].length);
-                            diagnostics.push(new vscode.Diagnostic(
-                                range, 
-                                `Qubit index ${idx} out of range (max ${numQubits - 1})`, 
-                                vscode.DiagnosticSeverity.Error
-                            ));
+                // Heuristic: For 'measure', usually "measure q c" or "measure q -> c"
+                // For gates, usually "gate q1 q2 ..."
+                // This is a simple heuristic and might need refinement for complex cases.
+                
+                // Check for qubit indices in general gates
+                // Note: This simple loop assumes all numbers are qubit indices, which is true for most gates
+                // but NOT for measure (which has cbit) or if there are integer params (though we stripped parens).
+                // Ideally we'd know the gate signature.
+                
+                // Special handling for measure if it looks like "- measure 0 1" (q=0, c=1)
+                // But QuYAML parser often uses structured measure.
+                // If user writes "- measure 0 1", parser might treat it as measure_all or error?
+                // QuYAML parser: "measure" -> measure_all. "measure q c" -> not standard in parser unless custom?
+                // Wait, parser `_apply_instruction` handles `measure` -> `measure_all`.
+                // It does NOT seem to handle `measure 0 1` inline string in `_apply_instruction`.
+                // It only handles `measure` (all) or structured `measure: ...`.
+                // So we might not need to validate inline measure indices if they aren't valid syntax anyway.
+                // However, let's keep the qubit check for gates like `cx 0 5`.
+                
+                const gateName = parts[startIndex-1];
+                if (gateName !== 'measure' && numQubits > 0) {
+                     for (let j = startIndex; j < parts.length; j++) {
+                        // Check if it's a pure integer
+                        if (/^\d+$/.test(parts[j])) {
+                            const idx = parseInt(parts[j]);
+                            if (idx >= numQubits) {
+                                const col = line.lastIndexOf(parts[j]); 
+                                const range = new vscode.Range(i, col, i, col + parts[j].length);
+                                diagnostics.push(new vscode.Diagnostic(
+                                    range, 
+                                    `Qubit index ${idx} out of range (max ${numQubits - 1})`, 
+                                    vscode.DiagnosticSeverity.Error
+                                ));
+                            }
                         }
                     }
                 }

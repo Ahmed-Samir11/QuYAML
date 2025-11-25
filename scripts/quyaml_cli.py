@@ -366,12 +366,6 @@ def cmd_compile(args: argparse.Namespace) -> int:
 
 def cmd_visualize(args: argparse.Namespace) -> int:
     """Visualize a QuYAML circuit and save to image."""
-    try:
-        import matplotlib.pyplot as plt
-    except ImportError:
-        print("ERROR: matplotlib is required for visualization. Install with 'pip install matplotlib'.", file=sys.stderr)
-        return 1
-
     text = _read_text(args.input)
     try:
         qc = parse_quyaml_to_qiskit(text)
@@ -390,6 +384,9 @@ def cmd_visualize(args: argparse.Namespace) -> int:
         qc.draw(output='mpl', filename=filename)
         print(f"Saved visualization to {filename}")
         return 0
+    except ImportError as e:
+        print(f"ERROR: Visualization dependencies missing. Please run 'pip install quyaml[viz]'. Details: {e}", file=sys.stderr)
+        return 1
     except Exception as e:
         print(f"ERROR: Failed to visualize: {e}", file=sys.stderr)
         return 1

@@ -531,10 +531,14 @@ class QuYamlJob:
             if strategy == 'least_busy':
                 # Find least busy backend
                 # Note: This is a simplified implementation. Real least_busy logic might differ.
-                return min(backends, key=lambda b: b.status().pending_jobs)
+                selected = min(backends, key=lambda b: b.status().pending_jobs)
             else:
                 # Default to first available
-                return backends[0]
+                selected = backends[0]
+            
+            # Result Metadata Logging (Safety)
+            print(f"[QuYAML] Dynamic Backend Selection: Strategy='{strategy}' -> Selected='{selected.name}'")
+            return selected
         else:
             raise QuYamlError("Invalid backend specification. Must be string or dict.")
 
