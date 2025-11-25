@@ -1,4 +1,4 @@
-from hypothesis import given, strategies as st
+from hypothesis import given, strategies as st, settings, HealthCheck
 from quyaml import parse_quyaml_to_qiskit
 from qiskit import QuantumCircuit
 
@@ -22,6 +22,7 @@ def st_quyaml_instructions(draw, max_qubits=4):
     return "\n".join(quyaml_list)
 
 @given(quyaml_string=st_quyaml_instructions())
+@settings(suppress_health_check=[HealthCheck.too_slow])
 def test_parser_handles_valid_generated_circuits(quyaml_string):
     """
     Property-Based Test: Asserts that the parser can process any valid,
