@@ -6,6 +6,7 @@ QuYAML is a token-efficient, human-readable data format for defining quantum cir
 [![Python](https://img.shields.io/badge/python-3.10%2B-blue)]()
 [![License](https://img.shields.io/badge/license-MIT-blue)]()
 [![Release](https://img.shields.io/github/v/release/Ahmed-Samir11/QuYAML)](https://github.com/Ahmed-Samir11/QuYAML/releases/latest)
+[![PyPI](https://img.shields.io/pypi/v/quyaml)](https://pypi.org/project/quyaml/)
 [![QASM3 Import](https://img.shields.io/badge/qasm3%20import-enabled-brightgreen)](https://pypi.org/project/qiskit-qasm3-import/)
 [![Benchmarks](https://github.com/Ahmed-Samir11/QuYAML/actions/workflows/benchmark.yml/badge.svg)](https://github.com/Ahmed-Samir11/QuYAML/actions/workflows/benchmark.yml)
 
