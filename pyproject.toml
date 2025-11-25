@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "quyaml"
-version = "0.4.0"
+version = "1.0.0"
 description = "QuYAML: a readable, compact quantum circuit format with Qiskit converter and CLI"
 readme = "README.md"
 authors = [{ name = "Ahmed Samir" }]
