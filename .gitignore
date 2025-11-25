@@ -46,3 +46,7 @@ Thumbs.db
 # Node.js
 node_modules/
 out/
+
+# Output
+runs/
+*.json

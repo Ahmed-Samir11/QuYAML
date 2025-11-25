@@ -1,4 +1,4 @@
-# QuYAML v0.4: A Human-Readable Standard for Quantum Circuits
+# QuYAML v1.0: A Human-Readable Standard for Quantum Circuits
 
 QuYAML is a token-efficient, human-readable data format for defining quantum circuits, designed for the age of AI-driven quantum development.
 
@@ -9,14 +9,16 @@ QuYAML is a token-efficient, human-readable data format for defining quantum cir
 [![QASM3 Import](https://img.shields.io/badge/qasm3%20import-enabled-brightgreen)](https://pypi.org/project/qiskit-qasm3-import/)
 [![Benchmarks](https://github.com/Ahmed-Samir11/QuYAML/actions/workflows/benchmark.yml/badge.svg)](https://github.com/Ahmed-Samir11/QuYAML/actions/workflows/benchmark.yml)
 
-This repository contains the official Python tooling for the QuYAML format. The parser now targets the **v0.4** specification by default, with a legacy opt-in for v0.2/0.3. It converts `.quyaml` files or strings into executable Qiskit `QuantumCircuit` objects and provides a CLI for validation, conversion, diffs, and benchmarking.
+This repository contains the official Python tooling for the QuYAML format. The parser targets the **v0.4** specification. It converts `.quyaml` files or strings into executable Qiskit `QuantumCircuit` objects and provides a CLI for validation, conversion, diffs, and benchmarking.
 
-Highlights in v0.4:
+Highlights in v1.0:
+- **Native Parameterization**: High-performance sweeps using Qiskit parameters.
+- **Opt-Out Provenance**: Auto-saving of results for reproducibility.
+- **Zero-Trust Security**: Secure backend resolution.
 - Structured control flow: if/elif/else, while, and for blocks
-- Composite conditions with `&&` and `||` (lowered to Qiskit dynamic-circuit builders)
+- Composite conditions with `&&` and `||`
 - Safer YAML surface: rejects anchors, aliases, custom tags, and merge keys
-- Strict schema and canonical formatter; JSON Schema shipped in `docs/schema/quyaml.schema.json`
-- CLI: validate, lint, format, convert (QuYAML↔QASM3), diff (human/JSON), compile (compact JSON)
+- Strict schema and canonical formatter
 - CI-friendly parse-time gates and token-count gates
 
 ## Why QuYAML?
@@ -148,9 +150,12 @@ cd QuYAML
 
 # Install dependencies
 pip install -r requirements.txt
+
+# Optional: Install with visualizer support
+pip install .[viz]
 ```
 
-Dependencies: `pyyaml`, `qiskit`, `numpy` (plus optional: `tiktoken`, `jsonschema`)
+Dependencies: `pyyaml`, `qiskit`, `numpy` (plus optional: `tiktoken`, `jsonschema`, `matplotlib`)
 
 ## Usage
 
@@ -561,3 +566,64 @@ Project Link: [https://github.com/Ahmed-Samir11/QuYAML](https://github.com/Ahmed
 ---
 
 **Built for the age of AI-driven quantum development.** 🚀
+
+## ⚡ Parameter Sweeps (Batch Execution)
+
+QuYAML v1.0 introduces **Native Parameterization**, allowing you to define symbolic parameters in your circuit and sweep over them efficiently at runtime. Unlike previous versions that re-parsed the circuit for every value, v1.0 uses Qiskit's `assign_parameters` to bind values to a single circuit object, enabling high-performance batch execution.
+
+### 1. Define a Parameterized Circuit
+Use the `$variable` syntax in your QuYAML file. You can define a default value in `params`, but it will be overridden during a sweep.
+
+```yaml
+# sweep_example.quyaml
+version: '0.4'
+circuit: native_sweep
+qubits: q[1]
+bits: c[1]
+params:
+  theta: 0  # Default value (will be symbolic in sweep)
+ops:
+  - h 0
+  - rx($theta) 0
+  - measure q[0], c[0]
+```
+
+### 2. Execute with a Sweep
+Define a `parameter_sweep` dictionary in the execution config (or pass it programmatically).
+
+```python
+from quyaml_parser import parse_quyaml_job
+import numpy as np
+
+# Load the circuit
+with open("sweep_example.quyaml", "r") as f:
+    job = parse_quyaml_job(f.read())
+
+# Define the sweep at runtime
+# This overrides any 'parameter_sweep' defined in the YAML file
+job.execution['parameter_sweep'] = {
+    'theta': np.linspace(0, np.pi, 10).tolist()
+}
+
+# Execute
+# This generates 10 bound circuits from 1 symbolic circuit (High Performance)
+result = job.execute(log_dir="./runs")
+
+print(f"Job ID: {result.job_id}")
+print(f"Results saved to: ./runs/quyaml_job_{result.job_id}.json")
+```
+
+## 🛡️ Provenance & Reproducibility
+
+QuYAML v1.0 enforces **Opt-Out Provenance**. By default, every job execution automatically saves a comprehensive JSON manifest to disk, ensuring you never lose the context of an experiment.
+
+The saved file (`./runs/quyaml_job_<id>.json`) contains:
+- **Job ID & Timestamp**: When and where it ran.
+- **Backend Info**: Which quantum computer (or simulator) was used.
+- **Full Results**: The counts or probabilities returned.
+- **Metadata**: The exact shots, parameter sweep values, and QuYAML version used.
+
+To customize the save location, pass `log_dir` to the execute method:
+```python
+result = job.execute(log_dir="./experiments/2025_qaoa_runs")
+```
