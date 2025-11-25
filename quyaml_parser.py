@@ -1,5 +1,6 @@
 import yaml
 from qiskit import QuantumCircuit
+from qiskit.circuit import Parameter, ParameterExpression
 import re
 import numpy as np
 import ast
@@ -30,49 +31,43 @@ def set_allow_legacy_versions(flag: bool) -> None:
     ALLOW_LEGACY_VERSIONS = bool(flag)
 
 
-def _safe_eval_expression(expr: str, params: Dict[str, Any]) -> float:
+def _safe_eval_expression(expr: str, params: Dict[str, Any]) -> Union[float, ParameterExpression]:
     """Safely evaluate a small arithmetic expression used in parameterized gates.
 
-    Security notes:
-    - Replaces `$name` occurrences with their numeric values from params.
-    - Supports a tiny subset of arithmetic and constants (pi, e) by default.
-    - If `asteval` is available, use it with a tightly constrained symbol table.
-      Otherwise, fall back to a minimal AST walker that only permits
-      numeric constants, +, -, *, /, ** and parentheses, and names {pi, e}.
+    Supports both numeric evaluation and Qiskit Parameter objects (Native Parameterization).
     """
-    # 1) Substitute parameters like $theta -> value
-    eval_expr = expr
-    for param_name, param_value in params.items():
-        eval_expr = eval_expr.replace(f"${param_name}", str(param_value))
+    # 1) Prepare expression for AST parsing by replacing $var with var
+    # We use a regex to find $identifier and replace it with the identifier name
+    # This assumes identifiers are valid Python names.
+    
+    # Map of available symbols (constants + params)
+    symbols = {
+        "pi": np.pi,
+        "e": np.e,
+    }
+    symbols.update(params)
 
-    # 2) Strict mode (v0.4): prefer the minimal AST evaluator. If you wish to
-    #    enable extended math via asteval, toggle this path explicitly.
-    if False and _AEInterpreter is not None:
-        sym = {
-            # constants
-            "pi": float(np.pi),
-            "e": float(np.e),
-            # common funcs (extend conservatively as needed)
-            "sin": np.sin,
-            "cos": np.cos,
-            "tan": np.tan,
-            "sqrt": np.sqrt,
-            "exp": np.exp,
-            "log": np.log,
-            "abs": abs,
-        }
-        ae = _AEInterpreter(symtable=sym, minimal=True)
-        out = ae(eval_expr)
-        if len(ae.error) > 0:
-            raise QuYamlError(f"Could not evaluate parameter expression '{expr}': {ae.error[0].get_error()}")
-        try:
-            return float(out)
-        except Exception as e:
-            raise QuYamlError(f"Parameter expression '{expr}' did not evaluate to a number: {e}")
+    def replace_var(match):
+        name = match.group(1)
+        if name not in params:
+             # If it's not in params, we can't evaluate it.
+             # But maybe it's a constant like pi?
+             # If not, it's an error.
+             pass
+        return name
 
-    # 3) Fallback: very small AST-based evaluator (no function calls)
-    # Accept only modern AST nodes (ast.Constant for literals). Avoid ast.Num to prevent
-    # deprecation warnings on Python 3.12+ and ensure forward compatibility with 3.14.
+    # Replace $name with name. 
+    # Note: This simple replacement might be risky if 'name' is a keyword or invalid,
+    # but QuYAML vars are usually simple.
+    try:
+        # We only replace $var if var is in params to avoid accidental replacement of other things?
+        # No, QuYAML syntax requires $ for variables.
+        eval_expr = re.sub(r'\$([a-zA-Z_][a-zA-Z0-9_]*)', replace_var, expr)
+    except Exception as e:
+        raise QuYamlError(f"Failed to parse variable syntax in '{expr}': {e}")
+
+    # 2) Fallback: very small AST-based evaluator (no function calls)
+    # Accept only modern AST nodes.
     allowed_nodes = (
         ast.Expression, ast.BinOp, ast.UnaryOp, ast.Constant,
         ast.Add, ast.Sub, ast.Mult, ast.Div, ast.Pow, ast.USub, ast.UAdd,
@@ -89,10 +84,8 @@ def _safe_eval_expression(expr: str, params: Dict[str, Any]) -> float:
                 return float(node.value)
             raise QuYamlError(f"Non-numeric constant in '{expr}'.")
         if isinstance(node, ast.Name):
-            if node.id == 'pi':
-                return float(np.pi)
-            if node.id == 'e':
-                return float(np.e)
+            if node.id in symbols:
+                return symbols[node.id]
             raise QuYamlError(f"Unknown symbol '{node.id}' in '{expr}'.")
         if isinstance(node, ast.UnaryOp):
             val = _eval(node.operand)
@@ -101,6 +94,32 @@ def _safe_eval_expression(expr: str, params: Dict[str, Any]) -> float:
             if isinstance(node.op, ast.USub):
                 return -val
             raise QuYamlError(f"Unsupported unary operator in '{expr}'.")
+        if isinstance(node, ast.BinOp):
+            left = _eval(node.left)
+            right = _eval(node.right)
+            if isinstance(node.op, ast.Add):
+                return left + right
+            if isinstance(node.op, ast.Sub):
+                return left - right
+            if isinstance(node.op, ast.Mult):
+                return left * right
+            if isinstance(node.op, ast.Div):
+                return left / right
+            if isinstance(node.op, ast.Pow):
+                return left ** right
+            if isinstance(node.op, ast.Mod):
+                return left % right
+            raise QuYamlError(f"Unsupported binary operator in '{expr}'.")
+        raise QuYamlError(f"Unexpected node type {type(node).__name__} in '{expr}'.")
+
+    try:
+        tree = ast.parse(eval_expr, mode='eval')
+        return _eval(tree.body)
+    except SyntaxError:
+        raise QuYamlError(f"Invalid expression syntax: '{expr}'")
+    except Exception as e:
+        if isinstance(e, QuYamlError): raise e
+        raise QuYamlError(f"Evaluation failed for '{expr}': {e}")
         if isinstance(node, ast.BinOp):
             left = _eval(node.left)
             right = _eval(node.right)
@@ -504,10 +523,11 @@ class QuYamlJob:
         self.execution = execution or {}
         self.post_processing = post_processing or []
 
-    def execute(self) -> QuYamlResult:
+    def execute(self, log_dir: str = "./runs") -> QuYamlResult:
         """
         Executes the job on the resolved backend.
         Handles parameter sweeps and returns a provenance-aware result object.
+        Automatically saves the result to log_dir (Opt-Out Provenance).
         """
         backend = self.resolve_backend()
         shots = self.execution.get('shots', 1024)
@@ -517,95 +537,35 @@ class QuYamlJob:
         circuits_to_run = []
         
         if sweep_config:
-            # Simple 1D sweep implementation for now
-            # Assumes keys in sweep_config match parameter names in circuit
-            from qiskit.circuit import Parameter
-            
-            # Flatten the sweep: currently supports only one parameter sweep or simple product
-            # For MVP: take the first parameter found
-            param_name = list(sweep_config.keys())[0]
-            values = sweep_config[param_name]
-            
-            # Find the parameter object in the circuit
-            # Note: QuYAML parser might have used strings or floats. 
-            # If the circuit has parameters, we need to bind them.
-            # But QuYAML parser currently evaluates expressions eagerly unless we change it.
-            # Wait, QuYAML parser evaluates params at parse time!
-            # To support sweeps, the parser needs to support symbolic parameters.
-            # Current parser: `_safe_eval_expression` replaces $theta with value.
-            # If $theta is not in params, it fails.
-            # So, for sweeps, the user must define the parameter but maybe not give it a value?
-            # Or we need to re-parse? No, that's inefficient.
-            # We should use Qiskit's Parameter object.
-            
-            # Workaround: If we want to support sweeps, we need to modify the parser to allow
-            # keeping parameters symbolic. But that's a big change.
-            # Alternative: The user provides a base circuit, and we use `assign_parameters`.
-            # But `assign_parameters` requires `Parameter` objects in the circuit.
-            # If `parse_quyaml_job` evaluated everything to floats, there are no Parameters.
-            
-            # Let's assume for this "Single-Shot" fix that we are binding to Qiskit Parameters.
-            # But since we can't easily change the whole parser right now to use Qiskit Parameters
-            # without breaking the "eager evaluation" model, we might have to skip the actual
-            # sweep logic implementation details or do a "re-parse" hack?
-            # No, let's assume the user uses Qiskit Parameters in the parser?
-            # The parser currently doesn't support creating Qiskit Parameters.
-            
-            # "The Flaw: Lack of Parameter Sweeps... Fix: The manifest needs a 'Batch Mode'..."
-            # If I can't change the parser to output Parameters, I can't implement this fully correctly
-            # without a major refactor.
-            # HOWEVER, I can implement the *interface* and throw a "NotImplemented" or 
-            # do a simple "re-bind" if I can find the gates.
-            
-            # Actually, let's look at `_apply_instruction`. It calls `_safe_eval_expression`.
-            # If I want to support sweeps, I should probably allow `params` to be missing
-            # if they are in `parameter_sweep`.
-            # But `_safe_eval_expression` raises error if param missing.
-            
-            # Compromise: I will implement the `execute` method structure and `QuYamlResult`
-            # and handle the "Single-Shot" limitation by *simulating* the sweep 
-            # (running multiple jobs) if I can't bind parameters efficiently, 
-            # OR I will just document that this is where it would go.
-            # But the user asked to "Solve" it.
-            
-            # Let's try to use `assign_parameters` if the circuit has them.
-            # Since the current parser resolves everything to float, `self.circuit.parameters` is empty.
-            # So `parameter_sweep` in YAML is useless unless the parser changes.
-            
-            # Let's modify `_safe_eval_expression` to return a Qiskit Parameter if the value is missing?
-            # That might break other things.
-            
-            # Let's stick to the "Provenance" fix which is the most critical "Safety" issue.
-            # And for "Single-Shot", I will implement the loop that *would* work if parameters were present,
-            # or maybe I can just run the circuit `len(values)` times?
-            # No, that doesn't change the parameter.
-            
-            # Okay, I will implement the `QuYamlResult` and `execute` method.
-            # For the sweep, I will add a placeholder warning that the parser needs update for symbolic params.
-            # Wait, the user said "Write the Python logic to resolve this at runtime."
-            # Maybe they imply I should fix the parser too?
-            # "The Job Manifest allows defining a circuit and parameters."
-            # If I define `params: { theta: 0 }` in YAML, it gets evaluated.
-            # If I want to sweep, I should override this.
-            # But the circuit is already built with `0`.
-            # I can't un-build it.
-            
-            # So, the only way is to re-parse with new parameters?
-            # That is actually a valid strategy! "Re-parse for each sweep point".
-            # It's slower but works with the current parser.
-            # Let's do that! It solves the problem without breaking the parser.
-            
-            print(f"[QuYAML] Executing parameter sweep for {param_name} ({len(values)} points)...")
-            # We need the original YAML to re-parse? We don't have it here.
-            # `QuYamlJob` only has the circuit.
-            # So we can't re-parse.
-            
-            # Okay, I will implement the `QuYamlResult` and `execute` method for the single shot case
-            # and add the `parameter_sweep` logic structure, but warn about the limitation.
-            # Or, I can try to find the gates with that value? No, dangerous.
-            
-            # Let's just implement the Provenance part fully.
-            pass
+            # Native Parameterization Support
+            # If the circuit has parameters, we use assign_parameters to generate the batch.
+            if self.circuit.parameters:
+                # Flatten the sweep: currently supports only one parameter sweep or simple product
+                # For MVP: take the first parameter found
+                param_name = list(sweep_config.keys())[0]
+                values = sweep_config[param_name]
+                
+                # Find the parameter object in the circuit
+                # We need to match the name.
+                target_param = None
+                for p in self.circuit.parameters:
+                    if p.name == param_name:
+                        target_param = p
+                        break
+                
+                if target_param:
+                    print(f"[QuYAML] Generating {len(values)} circuits for sweep over '{param_name}'...")
+                    # Efficiently bind parameters
+                    for val in values:
+                        bound_qc = self.circuit.assign_parameters({target_param: val})
+                        circuits_to_run.append(bound_qc)
+                else:
+                    print(f"WARNING: Parameter '{param_name}' defined in sweep but not found in circuit parameters. Running base circuit repeatedly.")
+                    circuits_to_run = [self.circuit] * len(values)
+            else:
+                # Fallback if parser didn't produce parameters (should not happen with new parser logic)
+                print("WARNING: Circuit has no parameters. Running base circuit repeatedly.")
+                pass
 
         # Default single execution
         if not circuits_to_run:
@@ -628,6 +588,13 @@ class QuYamlJob:
                     "executed_at": time.strftime("%Y-%m-%d %H:%M:%S")
                 }
             )
+            
+            # Auto-Save (Opt-Out Provenance)
+            os.makedirs(log_dir, exist_ok=True)
+            filename = f"quyaml_job_{job.job_id()}.json"
+            filepath = os.path.join(log_dir, filename)
+            q_result.save(filepath)
+            
             return q_result
             
         except Exception as e:
@@ -754,12 +721,18 @@ def parse_quyaml_job(quyaml_string: str) -> QuYamlJob:
         # Legacy/Simple mode: root is the circuit data
         circuit_data = data
 
+    # Identify symbolic parameters from sweep config
+    symbolic_params = []
+    sweep_config = execution.get('parameter_sweep', {})
+    if sweep_config:
+        symbolic_params = list(sweep_config.keys())
+
     # Parse the circuit
-    qc = _parse_circuit_data(circuit_data)
+    qc = _parse_circuit_data(circuit_data, symbolic_params=symbolic_params)
     
     return QuYamlJob(qc, metadata, execution, post_processing)
 
-def _parse_circuit_data(data: Dict[str, Any]) -> QuantumCircuit:
+def _parse_circuit_data(data: Dict[str, Any], symbolic_params: List[str] = None) -> QuantumCircuit:
     """
     Internal helper to parse circuit data (qubits, ops, etc.) into a QuantumCircuit.
     Refactored from parse_quyaml_to_qiskit.
@@ -769,6 +742,14 @@ def _parse_circuit_data(data: Dict[str, Any]) -> QuantumCircuit:
     # Support both 'parameters' and 'params' (optimized)
     params = data.get('params', data.get('parameters', {}))
     
+    # Inject symbolic parameters if requested
+    if symbolic_params:
+        for name in symbolic_params:
+            # Create Qiskit Parameter object
+            # If the param is already in 'params', we overwrite it with the symbolic version
+            # This allows the parser to use the Parameter object in gates
+            params[name] = Parameter(name)
+
     def get_reg_size(reg_str):
         if not reg_str or not isinstance(reg_str, str): return 0
         match = re.search(r'\[(\d+)\]', reg_str)
