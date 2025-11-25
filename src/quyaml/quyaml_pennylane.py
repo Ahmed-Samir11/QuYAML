@@ -9,7 +9,7 @@ This keeps PennyLane as an optional dependency.
 """
 from typing import Callable, Optional
 
-from quyaml_parser import parse_quyaml_to_qiskit
+from .quyaml_parser import parse_quyaml_to_qiskit
 
 try:
     import pennylane as qml

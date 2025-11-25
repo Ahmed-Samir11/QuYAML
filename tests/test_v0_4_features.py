@@ -1,7 +1,7 @@
 import pytest
 from qiskit import QuantumCircuit
 
-from quyaml_parser import parse_quyaml_to_qiskit, QuYamlError
+from quyaml import parse_quyaml_to_qiskit, QuYamlError
 
 
 def test_reset_string_and_structured():

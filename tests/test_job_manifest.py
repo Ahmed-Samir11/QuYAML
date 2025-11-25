@@ -1,6 +1,6 @@
 import pytest
 from qiskit import QuantumCircuit
-from quyaml_parser import parse_quyaml_job, parse_quyaml_to_qiskit, QuYamlJob
+from quyaml import parse_quyaml_job, parse_quyaml_to_qiskit, QuYamlJob
 
 def test_job_manifest_parsing():
     yaml_str = """

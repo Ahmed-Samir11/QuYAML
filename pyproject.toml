@@ -1,5 +1,5 @@
 [build-system]
-requires = ["setuptools>=68", "wheel"]
+requires = ["setuptools>=61.0,<70.0", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
@@ -8,7 +8,7 @@ version = "1.0.0"
 description = "QuYAML: a readable, compact quantum circuit format with Qiskit converter and CLI"
 readme = "README.md"
 authors = [{ name = "Ahmed Samir" }]
-license = { file = "LICENSE" }
+license = { text = "MIT" }
 requires-python = ">=3.10"
 dependencies = [
   "pyyaml",
@@ -17,7 +17,6 @@ dependencies = [
 ]
 classifiers = [
   "Programming Language :: Python :: 3",
-  "License :: OSI Approved :: MIT License",
   "Operating System :: OS Independent",
 ]
 
@@ -25,7 +24,7 @@ classifiers = [
 Homepage = "https://github.com/Ahmed-Samir11/QuYAML"
 
 [project.scripts]
-quyaml = "scripts.quyaml_cli:main"
+quyaml = "quyaml.cli:main"
 
 [project.optional-dependencies]
 qasm3 = [
@@ -36,3 +35,7 @@ viz = [
   "pylatexenc",
   "pylatex",
 ]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+

@@ -15,13 +15,8 @@ try:
 except Exception:
     jsonschema = None  # optional
 
-# Ensure repository root on path when running via python -m
-_ROOT = Path(__file__).resolve().parents[1]
-if str(_ROOT) not in sys.path:
-    sys.path.insert(0, str(_ROOT))
-
-from quyaml_parser import parse_quyaml_to_qiskit, QuYamlError
-from qiskit_bridge import qc_to_quyaml_dict, circuits_structurally_equal, diff_circuits
+from .quyaml_parser import parse_quyaml_to_qiskit, QuYamlError
+from .qiskit_bridge import qc_to_quyaml_dict, circuits_structurally_equal, diff_circuits
 
 
 def _read_text(path: str | None) -> str:

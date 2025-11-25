@@ -1,6 +1,6 @@
 """Test optimized QuYAML syntax with backward compatibility."""
 
-from quyaml_parser import parse_quyaml_to_qiskit
+from quyaml import parse_quyaml_to_qiskit
 
 # Original syntax (should still work)
 original_quyaml = """

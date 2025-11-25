@@ -13,7 +13,7 @@ import time
 import json
 import re
 import numpy as np
-from quyaml_parser import parse_quyaml_to_qiskit
+from quyaml import parse_quyaml_to_qiskit
 from qiskit import QuantumCircuit, QuantumRegister, ClassicalRegister
 from qiskit.qasm2 import dumps as qasm_dumps
 

@@ -9,7 +9,7 @@ _ROOT = Path(__file__).resolve().parents[1]
 if str(_ROOT) not in sys.path:
     sys.path.insert(0, str(_ROOT))
 
-from quyaml_parser import parse_quyaml_to_qiskit, QuYamlError
+from quyaml import parse_quyaml_to_qiskit, QuYamlError
 
 try:
     import tiktoken  # type: ignore

@@ -29,7 +29,7 @@ if _ROOT not in sys.path:
 
 import tiktoken
 from qiskit import qasm3
-from quyaml_parser import parse_quyaml_to_qiskit
+from quyaml import parse_quyaml_to_qiskit
 from qiskit import QuantumCircuit
 
 encoder = tiktoken.encoding_for_model("gpt-4")

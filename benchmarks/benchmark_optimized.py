@@ -6,7 +6,7 @@ Uses tiktoken for exact GPT-4 tokenization.
 import tiktoken
 import json
 from qiskit import QuantumCircuit
-from quyaml_parser import parse_quyaml_to_qiskit
+from quyaml import parse_quyaml_to_qiskit
 
 # Initialize GPT-4 tokenizer
 encoder = tiktoken.encoding_for_model("gpt-4")

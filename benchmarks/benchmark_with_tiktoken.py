@@ -11,7 +11,7 @@ import time
 import json
 import tiktoken
 import numpy as np
-from quyaml_parser import parse_quyaml_to_qiskit
+from quyaml import parse_quyaml_to_qiskit
 from qiskit import QuantumCircuit
 from qiskit.qasm2 import dumps as qasm_dumps, loads as qasm_loads
 

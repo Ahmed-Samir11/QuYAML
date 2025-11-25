@@ -5,7 +5,7 @@ Measures parsing time to ensure acceptable performance.
 
 import pytest
 import time
-from quyaml_parser import parse_quyaml_to_qiskit
+from quyaml import parse_quyaml_to_qiskit
 
 # Performance thresholds (in milliseconds)
 SIMPLE_CIRCUIT_MAX_TIME = 5.0  # Simple circuits should parse in < 5ms

@@ -1,8 +1,8 @@
 import yaml
 from qiskit import qasm3
 
-from quyaml_parser import parse_quyaml_to_qiskit
-from qiskit_bridge import qc_to_quyaml_dict, circuits_structurally_equal
+from quyaml import parse_quyaml_to_qiskit
+from quyaml import qc_to_quyaml_dict, circuits_structurally_equal
 
 
 def test_roundtrip_quyaml_to_qasm3_and_back_simple():

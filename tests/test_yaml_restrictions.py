@@ -1,5 +1,5 @@
 import pytest
-from quyaml_parser import parse_quyaml_to_qiskit, QuYamlError
+from quyaml import parse_quyaml_to_qiskit, QuYamlError
 
 
 def test_reject_yaml_anchors_aliases_tags():

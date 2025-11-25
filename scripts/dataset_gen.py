@@ -8,7 +8,7 @@ import yaml
 # Assuming qiskit_bridge.py is in the same directory or python path.
 import sys
 sys.path.append(str(Path(__file__).resolve().parents[1])) # Add repo root to path
-from qiskit_bridge import qc_to_quyaml_dict
+from quyaml import qc_to_quyaml_dict
 
 def convert_qasm_to_quyaml(qasm_str: str) -> str:
     try:

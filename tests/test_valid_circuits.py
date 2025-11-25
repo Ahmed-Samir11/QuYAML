@@ -1,7 +1,7 @@
 import pytest
 from qiskit import QuantumCircuit
 from qiskit.quantum_info import Operator
-from quyaml_parser import parse_quyaml_to_qiskit
+from quyaml import parse_quyaml_to_qiskit
 
 def test_parse_bell_state():
     """Tests parsing a valid Bell State circuit."""

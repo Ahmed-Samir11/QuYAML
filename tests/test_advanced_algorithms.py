@@ -2,7 +2,7 @@ import pytest
 import numpy as np
 from qiskit import QuantumCircuit
 from qiskit.quantum_info import Operator
-from quyaml_parser import parse_quyaml_to_qiskit
+from quyaml import parse_quyaml_to_qiskit
 
 
 def test_qft_3_qubit():

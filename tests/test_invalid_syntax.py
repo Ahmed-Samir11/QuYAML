@@ -1,5 +1,5 @@
 import pytest
-from quyaml_parser import parse_quyaml_to_qiskit, QuYamlError
+from quyaml import parse_quyaml_to_qiskit, QuYamlError
 
 def test_invalid_yaml_syntax():
     """Tests that malformed YAML raises an error."""

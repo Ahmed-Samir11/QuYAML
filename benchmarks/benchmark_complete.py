@@ -8,7 +8,7 @@ import tiktoken
 import json
 import time
 from qiskit import QuantumCircuit, qasm2, qasm3
-from quyaml_parser import parse_quyaml_to_qiskit
+from quyaml import parse_quyaml_to_qiskit
 
 # Initialize GPT-4 tokenizer
 encoder = tiktoken.encoding_for_model("gpt-4")

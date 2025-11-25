@@ -1,5 +1,5 @@
 from hypothesis import given, strategies as st
-from quyaml_parser import parse_quyaml_to_qiskit
+from quyaml import parse_quyaml_to_qiskit
 from qiskit import QuantumCircuit
 
 @st.composite
