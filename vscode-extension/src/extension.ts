@@ -65,6 +65,64 @@ function validateQuYaml(document: vscode.TextDocument, collection: vscode.Diagno
         }
     }
 
+    // Qubit Counter Logic
+    let numQubits = 0;
+    const qubitsMatch = text.match(/qubits:\s*(?:q\[(\d+)\]|(\d+))/);
+    if (qubitsMatch) {
+        numQubits = parseInt(qubitsMatch[1] || qubitsMatch[2]);
+    }
+
+    if (numQubits > 0) {
+        const lines = text.split('\n');
+        lines.forEach((line, i) => {
+            // 1. Check structured ops: "q: 5"
+            const qMatch = line.match(/q:\s*(\d+)/);
+            if (qMatch) {
+                const idx = parseInt(qMatch[1]);
+                if (idx >= numQubits) {
+                    const startCol = line.indexOf(qMatch[1]);
+                    const range = new vscode.Range(i, startCol, i, startCol + qMatch[1].length);
+                    diagnostics.push(new vscode.Diagnostic(
+                        range, 
+                        `Qubit index ${idx} out of range (max ${numQubits - 1})`, 
+                        vscode.DiagnosticSeverity.Error
+                    ));
+                }
+            }
+
+            // 2. Check inline ops: "- cx 0 5"
+            const trimmed = line.trim();
+            if (trimmed.startsWith('-')) {
+                // Remove parameters like (0.5) to avoid false positives
+                const noParams = trimmed.replace(/\([^)]*\)/g, '');
+                const parts = noParams.split(/\s+/);
+                
+                // Skip the first part (the gate name, e.g., "- cx")
+                // Note: parts[0] is "-", parts[1] is "cx" usually, or parts[0] is "-cx"
+                let startIndex = 1;
+                if (parts[0] === '-') startIndex = 2;
+
+                for (let j = startIndex; j < parts.length; j++) {
+                    // Check if it's a pure integer
+                    if (/^\d+$/.test(parts[j])) {
+                        const idx = parseInt(parts[j]);
+                        if (idx >= numQubits) {
+                            // Find position in original line
+                            // Note: This is naive and might match the wrong occurrence if duplicates exist
+                            const col = line.lastIndexOf(parts[j]); 
+                            const range = new vscode.Range(i, col, i, col + parts[j].length);
+                            diagnostics.push(new vscode.Diagnostic(
+                                range, 
+                                `Qubit index ${idx} out of range (max ${numQubits - 1})`, 
+                                vscode.DiagnosticSeverity.Error
+                            ));
+                        }
+                    }
+                }
+            }
+        });
+    }
+
     collection.set(document.uri, diagnostics);
 }
 

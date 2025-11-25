@@ -31,3 +31,8 @@ quyaml = "scripts.quyaml_cli:main"
 qasm3 = [
   "qiskit_qasm3_import",
 ]
+viz = [
+  "matplotlib",
+  "pylatexenc",
+  "pylatex",
+]

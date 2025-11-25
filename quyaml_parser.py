@@ -3,7 +3,8 @@ from qiskit import QuantumCircuit
 import re
 import numpy as np
 import ast
-from typing import Any, Dict
+import os
+from typing import Any, Dict, Union
 
 try:
     # Optional safe evaluator; used if available
@@ -467,6 +468,75 @@ class QuYamlJob:
         self.metadata = metadata or {}
         self.execution = execution or {}
         self.post_processing = post_processing or []
+
+    def resolve_backend(self):
+        """
+        Resolves the backend for execution using a Zero-Trust approach.
+        
+        Security Policy:
+        - Credentials are NEVER read from the QuYAML file.
+        - Credentials must be present in environment variables (IBMQ_TOKEN)
+          or in the local ~/.qiskit/qiskit-ibm.json config file.
+        
+        Returns:
+            The Qiskit backend object.
+        """
+        # Check if credentials are explicitly provided in the file (and warn/ignore)
+        if 'token' in self.execution or 'url' in self.execution:
+            print("WARNING: Credentials found in QuYAML file. They will be IGNORED per Zero-Trust policy.")
+        
+        # Try to load QiskitRuntimeService
+        try:
+            from qiskit_ibm_runtime import QiskitRuntimeService
+        except ImportError:
+            raise QuYamlError("qiskit-ibm-runtime is required for backend resolution.")
+
+        # Initialize service using env vars or local config (Zero-Trust)
+        # QiskitRuntimeService automatically looks for IBMQ_TOKEN or local config if no args provided.
+        try:
+            service = QiskitRuntimeService()
+        except Exception as e:
+            # Fallback: check for explicit env var if Qiskit didn't pick it up automatically
+            token = os.getenv('IBMQ_TOKEN')
+            if token:
+                service = QiskitRuntimeService(channel='ibm_quantum', token=token)
+            else:
+                raise QuYamlError(f"Failed to initialize QiskitRuntimeService: {e}. Ensure IBMQ_TOKEN is set or ~/.qiskit/qiskit-ibm.json exists.")
+
+        backend_spec = self.execution.get('backend')
+        if not backend_spec:
+            raise QuYamlError("No backend specified in execution options.")
+
+        if isinstance(backend_spec, str):
+            # Direct backend name
+            return service.backend(backend_spec)
+        
+        elif isinstance(backend_spec, dict):
+            # Filter strategy
+            min_qubits = backend_spec.get('min_qubits', 1)
+            simulator = backend_spec.get('simulator', False)
+            strategy = backend_spec.get('strategy', 'least_busy')
+            
+            filters = lambda b: (
+                b.configuration().n_qubits >= min_qubits and
+                b.configuration().simulator == simulator and
+                b.status().operational
+            )
+            
+            backends = service.backends(filters=filters)
+            
+            if not backends:
+                raise QuYamlError(f"No backend found matching criteria: {backend_spec}")
+            
+            if strategy == 'least_busy':
+                # Find least busy backend
+                # Note: This is a simplified implementation. Real least_busy logic might differ.
+                return min(backends, key=lambda b: b.status().pending_jobs)
+            else:
+                # Default to first available
+                return backends[0]
+        else:
+            raise QuYamlError("Invalid backend specification. Must be string or dict.")
 
 def parse_quyaml_job(quyaml_string: str) -> QuYamlJob:
     """
