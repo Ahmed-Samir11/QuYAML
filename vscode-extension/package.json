@@ -1,0 +1,50 @@
+{
+  "name": "quyaml-vscode",
+  "displayName": "QuYAML Support",
+  "description": "Language support for QuYAML quantum circuit files",
+  "version": "0.0.1",
+  "engines": {
+    "vscode": "^1.75.0"
+  },
+  "categories": [
+    "Programming Languages",
+    "Snippets"
+  ],
+  "activationEvents": [
+    "onLanguage:quyaml"
+  ],
+  "main": "./out/extension.js",
+  "contributes": {
+    "languages": [
+      {
+        "id": "quyaml",
+        "aliases": [
+          "QuYAML",
+          "quyaml"
+        ],
+        "extensions": [
+          ".quyaml",
+          ".yaml",
+          ".yml"
+        ],
+        "configuration": "./language-configuration.json"
+      }
+    ],
+    "snippets": [
+      {
+        "language": "quyaml",
+        "path": "./snippets.json"
+      }
+    ]
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run compile",
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./"
+  },
+  "devDependencies": {
+    "@types/vscode": "^1.75.0",
+    "@types/node": "^16.11.7",
+    "typescript": "^4.9.5"
+  }
+}

@@ -1,0 +1,41 @@
+{
+  "QuYAML Job": {
+    "prefix": "quyaml-job",
+    "body": [
+      "version: '0.4'",
+      "circuit: ${1:my_circuit}",
+      "qubits: ${2:q[2]}",
+      "bits: ${3:c[2]}",
+      "ops:",
+      "  - h 0",
+      "  - cx 0 1",
+      "  - measure:",
+      "      q: 0",
+      "      c: 0"
+    ],
+    "description": "Basic QuYAML Job Structure"
+  },
+  "Hadamard Gate": {
+    "prefix": "h",
+    "body": [
+      "- h ${1:0}"
+    ],
+    "description": "Hadamard Gate"
+  },
+  "CNOT Gate": {
+    "prefix": "cx",
+    "body": [
+      "- cx ${1:0} ${2:1}"
+    ],
+    "description": "CNOT Gate"
+  },
+  "Measure": {
+    "prefix": "measure",
+    "body": [
+      "- measure:",
+      "    q: ${1:0}",
+      "    c: ${2:0}"
+    ],
+    "description": "Measurement"
+  }
+}

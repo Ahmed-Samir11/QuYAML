@@ -4,15 +4,66 @@
   "title": "QuYAML v0.4 Schema",
   "description": "JSON Schema for QuYAML v0.4 files (supports optimized/original keys and structured ops).",
   "type": "object",
-  "required": ["version", "qubits", "ops"],
+  "required": ["version"],
+  "oneOf": [
+    {
+      "required": ["qubits", "ops"],
+      "description": "Legacy/Simple mode: Circuit defined at root."
+    },
+    {
+      "required": ["circuit"],
+      "description": "Job Manifest mode: Circuit defined in 'circuit' object."
+    }
+  ],
   "properties": {
     "version": {
       "type": ["string", "number"],
       "enum": ["0.4", 0.4],
       "description": "QuYAML specification version; v0.4 required by default."
     },
-    "circuit": { "type": "string" },
-    "metadata": { "type": "object", "additionalProperties": true },
+    "metadata": {
+      "type": "object",
+      "additionalProperties": true,
+      "description": "Metadata about the job (name, author, description, etc.)."
+    },
+    "execution": {
+      "type": "object",
+      "properties": {
+        "backend": { "type": "string" },
+        "shots": { "type": "integer", "minimum": 1 },
+        "optimization_level": { "type": "integer", "minimum": 0, "maximum": 3 }
+      },
+      "additionalProperties": true,
+      "description": "Runtime execution options."
+    },
+    "post_processing": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["type"],
+        "properties": {
+          "type": { "type": "string" }
+        },
+        "additionalProperties": true
+      },
+      "description": "Post-processing steps (e.g., histogram, save_results)."
+    },
+    "circuit": {
+      "type": "object",
+      "properties": {
+        "qubits": { "$ref": "#/properties/qubits" },
+        "bits": { "$ref": "#/properties/bits" },
+        "qreg": { "$ref": "#/properties/qubits" },
+        "creg": { "$ref": "#/properties/bits" },
+        "params": { "$ref": "#/properties/params" },
+        "parameters": { "$ref": "#/properties/params" },
+        "ops": { "$ref": "#/properties/ops" },
+        "instructions": { "$ref": "#/properties/ops" }
+      },
+      "required": ["qubits", "ops"],
+      "additionalProperties": false,
+      "description": "The quantum circuit definition (nested)."
+    },
     "qubits": {
       "type": "string",
       "pattern": "^q\\[(?:0|[1-9]\\d*)]$",

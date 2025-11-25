@@ -320,6 +320,12 @@ def main(argv: list[str] | None = None) -> int:
     cp.add_argument("--pretty", action="store_true", help="Pretty-print JSON")
     cp.set_defaults(func=cmd_compile)
 
+    # visualize
+    vz = sub.add_parser("visualize", help="Visualize a QuYAML circuit and save to image")
+    vz.add_argument("input", nargs="?", help="Path to file or '-' for stdin")
+    vz.add_argument("-o", "--output", help="Output image file (e.g., circuit.png)")
+    vz.set_defaults(func=cmd_visualize)
+
     args = p.parse_args(argv)
     return args.func(args)
 
@@ -356,6 +362,37 @@ def cmd_compile(args: argparse.Namespace) -> int:
         else:
             print(json.dumps(data, separators=(",", ":")))
     return 0
+
+
+def cmd_visualize(args: argparse.Namespace) -> int:
+    """Visualize a QuYAML circuit and save to image."""
+    try:
+        import matplotlib.pyplot as plt
+    except ImportError:
+        print("ERROR: matplotlib is required for visualization. Install with 'pip install matplotlib'.", file=sys.stderr)
+        return 1
+
+    text = _read_text(args.input)
+    try:
+        qc = parse_quyaml_to_qiskit(text)
+    except QuYamlError as e:
+        print(f"ERROR: {e}", file=sys.stderr)
+        return 2
+
+    try:
+        # Use qiskit's draw method
+        filename = args.output
+        if not filename:
+            print("ERROR: --output is required for visualization.", file=sys.stderr)
+            return 1
+        
+        # 'mpl' is the matplotlib drawer which supports png, svg, etc.
+        qc.draw(output='mpl', filename=filename)
+        print(f"Saved visualization to {filename}")
+        return 0
+    except Exception as e:
+        print(f"ERROR: Failed to visualize: {e}", file=sys.stderr)
+        return 1
 
 
 if __name__ == "__main__":
