@@ -122,34 +122,22 @@ function validateQuYaml(document: vscode.TextDocument, collection: vscode.Diagno
                 let startIndex = 1;
                 if (parts[0] === '-') startIndex = 2;
 
-                // Heuristic: For 'measure', usually "measure q c" or "measure q -> c"
-                // For gates, usually "gate q1 q2 ..."
-                // This is a simple heuristic and might need refinement for complex cases.
-                
-                // Check for qubit indices in general gates
-                // Note: This simple loop assumes all numbers are qubit indices, which is true for most gates
-                // but NOT for measure (which has cbit) or if there are integer params (though we stripped parens).
-                // Ideally we'd know the gate signature.
-                
-                // Special handling for measure if it looks like "- measure 0 1" (q=0, c=1)
-                // But QuYAML parser often uses structured measure.
-                // If user writes "- measure 0 1", parser might treat it as measure_all or error?
-                // QuYAML parser: "measure" -> measure_all. "measure q c" -> not standard in parser unless custom?
-                // Wait, parser `_apply_instruction` handles `measure` -> `measure_all`.
-                // It does NOT seem to handle `measure 0 1` inline string in `_apply_instruction`.
-                // It only handles `measure` (all) or structured `measure: ...`.
-                // So we might not need to validate inline measure indices if they aren't valid syntax anyway.
-                // However, let's keep the qubit check for gates like `cx 0 5`.
-                
                 const gateName = parts[startIndex-1];
                 if (gateName !== 'measure' && numQubits > 0) {
                      for (let j = startIndex; j < parts.length; j++) {
+                        const part = parts[j];
+                        
+                        // Skip variables (starting with $) to avoid false positives
+                        if (part.startsWith('$')) {
+                            continue;
+                        }
+
                         // Check if it's a pure integer
-                        if (/^\d+$/.test(parts[j])) {
-                            const idx = parseInt(parts[j]);
+                        if (/^\d+$/.test(part)) {
+                            const idx = parseInt(part);
                             if (idx >= numQubits) {
-                                const col = line.lastIndexOf(parts[j]); 
-                                const range = new vscode.Range(i, col, i, col + parts[j].length);
+                                const col = line.lastIndexOf(part); 
+                                const range = new vscode.Range(i, col, i, col + part.length);
                                 diagnostics.push(new vscode.Diagnostic(
                                     range, 
                                     `Qubit index ${idx} out of range (max ${numQubits - 1})`, 
